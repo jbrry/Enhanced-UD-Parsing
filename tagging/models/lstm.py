@@ -31,7 +31,7 @@ class NerLSTM(Model):
         mask = get_text_field_mask(tokens)
 
         embedded = self._embedder(tokens)
-        encoded = self._encoder(embeddings, mask)
+        encoded = self._encoder(embedded, mask)
         classified = self._classifier(encoded)
 
         self._f1(classified, label, mask)
