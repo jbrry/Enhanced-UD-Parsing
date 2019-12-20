@@ -47,6 +47,3 @@ class CoNLL03DatasetReader(DatasetReader):
         return Instance(fields)
 
 
-
-
-
