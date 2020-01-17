@@ -33,6 +33,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         self,
         token_indexers: Dict[str, TokenIndexer] = None,
         use_language_specific_pos: bool = False,
+        print_data: bool = False,
         tokenizer: Tokenizer = None,
         lazy: bool = False,
     ) -> None:
@@ -50,9 +51,6 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             logger.info("Reading UD instances from conllu dataset at: %s", file_path)
 
             for annotation in parse_incr(conllu_file):
-                #print(annotation)
-                
-                
                 # CoNLLU annotations sometimes add back in words that have been elided
                 # in the original sentence; we remove these, as we're just predicting
                 # dependencies for the original sentence.
@@ -60,46 +58,58 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 # as parsed by the conllu python library.
                 #annotation = [x for x in annotation if isinstance(x["id"], int)]
 
-                heads = [x["head"] for x in annotation]
-                tags = [x["deprel"] for x in annotation]
+                #heads = [x["head"] for x in annotation]
+                #tags = [x["deprel"] for x in annotation]
                 
                 words = [x["form"] for x in annotation]
-                #if self.use_language_specific_pos:
-                #    pos_tags = [x["xpostag"] for x in annotation]
-                #else:
-                #    pos_tags = [x["upostag"] for x in annotation]
-                #yield self.text_to_instance(words, pos_tags, list(zip(tags, heads)))
+                if self.use_language_specific_pos:
+                    pos_tags = [x["xpostag"] for x in annotation]
+                else:
+                    pos_tags = [x["upostag"] for x in annotation]
+                
                 deps = [x["deps"] for x in annotation]
+    
+                if print_data:
+                    #print(words, heads, tags, deps)
+                    print("next example:")
+                    print("=" * 15)
+                    print("words: {}".format(words))
+                    print("tags: {}".format(tags))
+                    print("heads: {}".format(heads))
+                    print("deps: {}:".format(deps))
+                    print("=" * 15)
+                    print("\n")
 
-                #print(words, heads, tags, deps)
-                print("next example:")
-                print("=" * 15)
-                print("words: {}".format(words))
-                print("tags: {}".format(tags))
-                print("heads: {}".format(heads))
-                print("deps: {}:".format(deps))
-                print("=" * 15)
-                print("\n")
-
-
-
-		"""
-		next example:
-		===============
-		words: ['The', 'team', 'who', 'work', 'there', 'are', 'helpfull', ',', 'friendly', 'and', 'extremely', 'knowledgeable', 'and', 'will', 'help', 'you', 'as', 'much', 'as', 'they', 'can', 'with', 'thier', 'years', 'of', 'hands', 'on', 'practice', '.']
-		tags: ['det', 'nsubj', 'nsubj', 'acl:relcl', 'advmod', 'cop', 'root', 'punct', 'conj', 'cc', 'advmod', 'conj', 'cc', 'aux', 'conj', 'obj', 'advmod', 'advmod', 'mark', 'nsubj', 'advcl', 'case', 'nmod:poss', 'obl', 'case', 'compound', 'compound', 'nmod', 'punct']
-		heads: [2, 7, 4, 2, 4, 7, 0, 9, 7, 12, 12, 7, 15, 15, 7, 15, 18, 15, 21, 21, 17, 24, 24, 15, 28, 28, 26, 24, 7]
-		deps: [[('det', 2)], [('nsubj', 4), ('nsubj', 7), ('nsubj', 9), ('nsubj', 12), ('nsubj', 15)], [('ref', 2)], [('acl:relcl', 2)], [('advmod', 4)], [('cop', 7)], [('root', 0)], [('punct', 9)], [('conj:and', 7)], [('cc', 12)], [('advmod', 12)], [('conj:and', 7)], [('cc', 15)], [('aux', 15)], [('conj:and', 7)], [('obj', 15)], [('advmod', 18)], [('advmod', 15)], [('mark', 21)], [('nsubj', 21)], [('advcl:as', 17)], [('case', 24)], [('nmod:poss', 24)], [('obl:with', 15)], [('case', 28)], [('compound', 28)], [('compound', 26)], [('nmod:of', 24)], [('punct', 7)]]:
-		===============
+                    """
+                    next example:
+                    ===============
+                    words: ['The', 'team', 'who', 'work', 'there', 'are', 'helpfull', ',', 'friendly', 'and', 'extremely', 'knowledgeable', 'and', 'will', 'help', 'you', 'as', 'much', 'as', 'they', 'can', 'with', 'thier', 'years', 'of', 'hands', 'on', 'practice', '.']
+                    tags: ['det', 'nsubj', 'nsubj', 'acl:relcl', 'advmod', 'cop', 'root', 'punct', 'conj', 'cc', 'advmod', 'conj', 'cc', 'aux', 'conj', 'obj', 'advmod', 'advmod', 'mark', 'nsubj', 'advcl', 'case', 'nmod:poss', 'obl', 'case', 'compound', 'compound', 'nmod', 'punct']
+                    heads: [2, 7, 4, 2, 4, 7, 0, 9, 7, 12, 12, 7, 15, 15, 7, 15, 18, 15, 21, 21, 17, 24, 24, 15, 28, 28, 26, 24, 7]
+                    deps: [[('det', 2)], [('nsubj', 4), ('nsubj', 7), ('nsubj', 9), ('nsubj', 12), ('nsubj', 15)], [('ref', 2)], [('acl:relcl', 2)], [('advmod', 4)], [('cop', 7)], [('root', 0)], [('punct', 9)], [('conj:and', 7)], [('cc', 12)], [('advmod', 12)], [('conj:and', 7)], [('cc', 15)], [('aux', 15)], [('conj:and', 7)], [('obj', 15)], [('advmod', 18)], [('advmod', 15)], [('mark', 21)], [('nsubj', 21)], [('advcl:as', 17)], [('case', 24)], [('nmod:poss', 24)], [('obl:with', 15)], [('case', 28)], [('compound', 28)], [('compound', 26)], [('nmod:of', 24)], [('punct', 7)]]
 
 
-"""
+                    list(zip(tags, heads))::
+                    [('det', 2), ('nsubj', 7), ('nsubj', 4), ('acl:relcl', 2), ('advmod', 4), ('cop', 7), ('root', 0), ('punct', 9), ('conj', 7), ('cc', 12), ('advmod', 12), ('conj', 7), ('cc', 15), ('aux', 15), ('conj', 7), ('obj', 15), ('advmod', 18), ('advmod', 15), ('mark', 21), ('nsubj', 21), ('advcl', 17), ('case', 24), ('nmod:poss', 24), ('obl', 15), ('case', 28), ('compound', 28), ('compound', 26), ('nmod', 24), ('punct', 7)]
+
+                    deps::
+                    [[('det', 2)], [('nsubj', 4), ('nsubj', 7), ('nsubj', 9), ('nsubj', 12), ('nsubj', 15)], [('ref', 2)], [('acl:relcl', 2)], [('advmod', 4)], [('cop', 7)], [('root', 0)], [('punct', 9)], [('conj:and', 7)], [('cc', 12)], [('advmod', 12)], [('conj:and', 7)], [('cc', 15)], [('aux', 15)], [('conj:and', 7)], [('obj', 15)], [('advmod', 18)], [('advmod', 15)], [('mark', 21)], [('nsubj', 21)], [('advcl:as', 17)], [('case', 24)], [('nmod:poss', 24)], [('obl:with', 15)], [('case', 28)], [('compound', 28)], [('compound', 26)], [('nmod:of', 24)], [('punct', 7)]]
+
+                    ===============
+                    """
+
+                    # need to parse deps
+
+
+
+                yield self.text_to_instance(words, pos_tags, deps)
+
     @overrides
     def text_to_instance(
         self,  # type: ignore
         words: List[str],
         upos_tags: List[str],
-        dependencies: List[Tuple[str, int]] = None,
+        dependencies: List[List[Tuple[str, int]]] = None,
     ) -> Instance:
 
         """
@@ -136,7 +146,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 [x[1] for x in dependencies], text_field, label_namespace="head_index_tags"
             )
 
-        fields["metadata"] = MetadataField({"words": words, "pos": upos_tags})
+
+            fields["metadata"] = MetadataField({"words": words, "pos": upos_tags, "head_indices":head_indices})
         return Instance(fields)
 
 
