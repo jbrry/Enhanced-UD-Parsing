@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, cast
 import logging
 
 from overrides import overrides
@@ -6,7 +6,7 @@ from conllu import parse_incr
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import Field, TextField, SequenceLabelField, MetadataField
+from allennlp.data.fields import Field, ListField, TextField, SequenceLabelField, MetadataField, MultiLabelField
 from allennlp.data.instance import Instance
 from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
 from allennlp.data.tokenizers import Token, Tokenizer
@@ -40,6 +40,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         super().__init__(lazy)
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
         self.use_language_specific_pos = use_language_specific_pos
+        self.print_data = print_data
         self.tokenizer = tokenizer
 
     @overrides
@@ -58,18 +59,18 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 # as parsed by the conllu python library.
                 #annotation = [x for x in annotation if isinstance(x["id"], int)]
 
-                #heads = [x["head"] for x in annotation]
-                #tags = [x["deprel"] for x in annotation]
+                heads = [x["head"] for x in annotation]
+                tags = [x["deprel"] for x in annotation]
                 
                 words = [x["form"] for x in annotation]
                 if self.use_language_specific_pos:
                     pos_tags = [x["xpostag"] for x in annotation]
                 else:
                     pos_tags = [x["upostag"] for x in annotation]
-                
+               
                 deps = [x["deps"] for x in annotation]
     
-                if print_data:
+                if self.print_data:
                     #print(words, heads, tags, deps)
                     print("next example:")
                     print("=" * 15)
@@ -102,14 +103,15 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
 
 
-                yield self.text_to_instance(words, pos_tags, deps)
+                yield self.text_to_instance(words, pos_tags, list(zip(tags, heads)), deps)
 
     @overrides
     def text_to_instance(
         self,  # type: ignore
         words: List[str],
         upos_tags: List[str],
-        dependencies: List[List[Tuple[str, int]]] = None,
+        dependencies: List[Tuple[str, int]] = None,
+        deps: List[List[Tuple[str, int]]] = None,
     ) -> Instance:
 
         """
@@ -126,6 +128,13 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         An instance containing words, upos tags, dependency head tags and head
         indices as fields.
         """
+        from itertools import chain
+
+        print(words)
+        #print(upos_tags)
+        print("DEPENDENCIES")
+        print(deps)
+
         fields: Dict[str, Field] = {}
 
         if self.tokenizer is not None:
@@ -135,19 +144,118 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         text_field = TextField(tokens, self._token_indexers)
         fields["words"] = text_field
+        #print(upos_tags)
+
+        #upos_tags = list(upos_tags)
+        #for _ in upos_tags:
+        #    _.append(1)
+
+        #print(upos_tags)
         fields["pos_tags"] = SequenceLabelField(upos_tags, text_field, label_namespace="pos")
+
+        #print(fields["pos_tags"])
         if dependencies is not None:
             # We don't want to expand the label namespace with an additional dummy token, so we'll
             # always give the 'ROOT_HEAD' token a label of 'root'.
-            fields["head_tags"] = SequenceLabelField(
-                [x[0] for x in dependencies], text_field, label_namespace="head_tags"
-            )
-            fields["head_indices"] = SequenceLabelField(
-                [x[1] for x in dependencies], text_field, label_namespace="head_index_tags"
-            )
+
+            #print(dependencies)
+            
+            heads = []
+            rels = []
+
+            for target_output in deps:
+                # check if there is just 1 head
+                if len(target_output) == 1:
+                    head = [x[1] for x in target_output]
+                    rel = [x[0] for x in target_output]
+                    heads.append(head)
+                    rels.append(rel)
+                # more than 1 head
+                else:
+                    # append all current target heads/rels to a list
+                    current_heads = []
+                    current_rels = []
+                    for rel_head_tup in target_output:
+                        current_heads.append(rel_head_tup[1])
+                        current_rels.append(rel_head_tup[0])
+                    heads.append(current_heads)
+                    rels.append(current_rels)
+
+            
+            #heads=list(chain.from_iterable(heads))
+            #rels=list(chain.from_iterable(rels))
 
 
-            fields["metadata"] = MetadataField({"words": words, "pos": upos_tags, "head_indices":head_indices})
+            print("rels", rels)
+            print("heads", heads)
+            
+            #for h in heads:
+            #    print("---", h)
+            #    fields["head_indices"] = h
+                
+                
+                #update(MultiLabelField(h, skip_indexing=True, num_labels = (len(heads)+1)))
+
+            
+            #print(fields["head_indices"])
+            #print(fields["head_indices"])
+
+            #fields["head_tags"] = MultiLabelField(
+            #    rels
+            #)
+
+
+            #fields["head_tags"] = (MultiLabelField, r
+
+
+
+            #fields["head_indices"] = MultiLabelField(h for h in heads)
+
+            print("input of Multi label field looks like")
+            print([x[0] for x in heads])
+
+            #fields["head_indices"] = SequenceLabelField(
+            #    [x[1] for x in dependencies], text_field, label_namespace="head_index_tags"
+            #)
+            #fields["head_indices"] = MultiLabelField(
+            #    [x for x in heads], text_field, label_namespace="head_index_tags"
+            #)
+            fields["head_indices"] = MultiLabelField(
+                [x[0] for x in heads], skip_indexing=True, num_labels = len(heads)+1
+            )
+
+            #fields["head_indices"] = MultiLabelField(
+            #    [x for x in heads], text_field, label_namespace="head_index_tags"
+            #)
+
+
+
+
+            #fields["head_indices"] = cast(MultiLabelField, heads)
+            #print("CAAAAASTING!!!!!" ,fields["head_indices"])
+            print(fields)
+            #fields["head_indices"] = MultiLabelField(heads, label_namespace="head_index_tags")
+            #x = cast(MultiLabelField, heads)
+            #print("XXXX", x)
+
+            #label_field = cast(MultiLabelField, heads)
+            #fields["head_indices"] = label_field
+
+
+            #fields["head_indices"] = x
+            
+            #fields["head_indices"] = MultiLabelField(heads)
+            
+            #ListField([
+            #        MultiLabelField(label) for label in heads
+            #        ], skip_indexing=True)
+
+            #fields["head_indices"] = SequenceLabelField(
+            #    [x for x in head_ids], text_field, label_namespace="head_index_tags"
+            #)
+
+
+            fields["metadata"] = MetadataField({"words": words, "pos": upos_tags})
         return Instance(fields)
 
 
