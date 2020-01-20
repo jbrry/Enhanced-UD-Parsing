@@ -6,7 +6,8 @@ from conllu import parse_incr
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import Field, ListField, TextField, SequenceLabelField, MetadataField, MultiLabelField
+from allennlp.data.fields import Field, LabelField, ListField, TextField, SequenceLabelField, MetadataField, MultiLabelField
+from tagging.fields.sequence_multilabel_field import SequenceMultiLabelField
 from allennlp.data.instance import Instance
 from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
 from allennlp.data.tokenizers import Token, Tokenizer
@@ -144,21 +145,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         text_field = TextField(tokens, self._token_indexers)
         fields["words"] = text_field
-        #print(upos_tags)
 
-        #upos_tags = list(upos_tags)
-        #for _ in upos_tags:
-        #    _.append(1)
-
-        #print(upos_tags)
         fields["pos_tags"] = SequenceLabelField(upos_tags, text_field, label_namespace="pos")
 
-        #print(fields["pos_tags"])
         if dependencies is not None:
             # We don't want to expand the label namespace with an additional dummy token, so we'll
             # always give the 'ROOT_HEAD' token a label of 'root'.
-
-            #print(dependencies)
             
             heads = []
             rels = []
@@ -181,48 +173,32 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     heads.append(current_heads)
                     rels.append(current_rels)
 
-            
-            #heads=list(chain.from_iterable(heads))
-            #rels=list(chain.from_iterable(rels))
-
-
-            print("rels", rels)
+            #print("rels", rels)
             print("heads", heads)
+            #print("input of Multi label field looks like")
+            #print([x[0] for x in heads])
             
             #for h in heads:
             #    print("---", h)
             #    fields["head_indices"] = h
-                
-                
-                #update(MultiLabelField(h, skip_indexing=True, num_labels = (len(heads)+1)))
-
             
-            #print(fields["head_indices"])
-            #print(fields["head_indices"])
 
-            #fields["head_tags"] = MultiLabelField(
-            #    rels
+            #fields["head_indices"] = ListField[ListField[LabelField]]
+            
+            fields["head_indices"] = SequenceMultiLabelField(heads)
+            #fields["head_indices"] = ListField([ListField([LabelField(heads)])])
+            #ListField([Listfield([LabelField([heads]])])
+            
+            #ListField([ListField[([x for x in heads]))
+            
+            
+            #ListField[ListField(LabelField([x for x in heads]))]
+            
+            #ListField([LabelField(x, "logical_form") for x in logical_form[0]])
+            
+            #MultiLabelField(
+            #    [x[0] for x in heads], skip_indexing=True, num_labels = len(heads)+1
             #)
-
-
-            #fields["head_tags"] = (MultiLabelField, r
-
-
-
-            #fields["head_indices"] = MultiLabelField(h for h in heads)
-
-            print("input of Multi label field looks like")
-            print([x[0] for x in heads])
-
-            #fields["head_indices"] = SequenceLabelField(
-            #    [x[1] for x in dependencies], text_field, label_namespace="head_index_tags"
-            #)
-            #fields["head_indices"] = MultiLabelField(
-            #    [x for x in heads], text_field, label_namespace="head_index_tags"
-            #)
-            fields["head_indices"] = MultiLabelField(
-                [x[0] for x in heads], skip_indexing=True, num_labels = len(heads)+1
-            )
 
             #fields["head_indices"] = MultiLabelField(
             #    [x for x in heads], text_field, label_namespace="head_index_tags"
@@ -231,20 +207,10 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
 
 
-            #fields["head_indices"] = cast(MultiLabelField, heads)
-            #print("CAAAAASTING!!!!!" ,fields["head_indices"])
-            print(fields)
-            #fields["head_indices"] = MultiLabelField(heads, label_namespace="head_index_tags")
-            #x = cast(MultiLabelField, heads)
-            #print("XXXX", x)
-
-            #label_field = cast(MultiLabelField, heads)
-            #fields["head_indices"] = label_field
 
 
-            #fields["head_indices"] = x
-            
-            #fields["head_indices"] = MultiLabelField(heads)
+
+
             
             #ListField([
             #        MultiLabelField(label) for label in heads
