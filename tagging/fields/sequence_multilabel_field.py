@@ -57,7 +57,7 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
     def __init__(
         self,
         labels: Sequence[Sequence[Union[str, int]]],
-        # SLF = labels: Union[List[str], List[int]],
+        #labels: List[List[Union[str, int]]],
         #sequence_field: SequenceField,
         label_namespace: str = "labels",
         skip_indexing: bool = False,
@@ -68,13 +68,10 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
         self._label_ids = None
         self._maybe_warn_for_namespace(label_namespace)
         self._num_labels = num_labels
-        
-    
-        
-        print("your labels look like:")
-        print(labels)
+
         
 #        if skip_indexing and self.labels:
+        
 #            # first check if its a list
 #            if not all(isinstance(label, list) for label in labels):
 #                raise ConfigurationError(
@@ -82,6 +79,7 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
 #                    "Found labels: {}".format(labels)   
 #                )
 #            
+        
 #            # then check each item in the list is an int...
 #            for li in labels:
 #                if not all(isinstance(label, int) for label in li):
@@ -101,26 +99,27 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
 #            self._label_ids = labels
 #        else:
             # first check if its a list
+            
+            
         if not all(isinstance(label, list) for label in labels):
             raise ConfigurationError(
-                "SequenceMultiLabelFields expects string labels if skip_indexing=False. "
+                "SequenceMultiLabelFields expects a list of candidate labels for each input. "
                 "Found labels: {}".format(labels)   
             )
-            
+        
+        # first check if the labels are integers
         self._skip_indexing = False
         for li in labels:
-            if all([isinstance(x, int) for x in li]):
+            if all([isinstance(label, int) for label in li]):
                 self._label_ids = labels
                 self._skip_indexing = True
-        
-        # if the above doesn't see that it is all ints     
+            
         if self._skip_indexing == False:
-            # then check each item in the list is a string...
-            # somehow ints are getting found here..
+            # then check each item in the list is a string
             for li in labels:
                 if not all(isinstance(label, str) for label in li):
                     raise ConfigurationError(
-                        "SequenceMultiLabelFields expects string labels if skip_indexing=False. "
+                        "SequenceMultiLabelFields expects string labels if skip_indexing=False."
                         "Found labels: {}".format(labels)
                 )
 
@@ -140,17 +139,15 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
     @overrides
     def count_vocab_items(self, counter: Dict[str, Dict[str, int]]):
         if self._label_ids is None:
-            # operate on list level first
             for li in self.labels:
                 for label in li:
                     counter[self._label_namespace][label] += 1  # type: ignore
-
-                
+               
     @overrides
     def index(self, vocab: Vocabulary):
         if self._label_ids is None:
             for li in self.labels:
-                # need to be careful I am not overwriting self._label_ids
+                # TODO: need to be careful I am not overwriting self._label_ids
                 self._label_ids = [vocab.get_token_index(label, self._label_namespace) # type: ignore
                     for label in li]
         if not self._num_labels:

@@ -72,7 +72,6 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 deps = [x["deps"] for x in annotation]
     
                 if self.print_data:
-                    #print(words, heads, tags, deps)
                     print("next example:")
                     print("=" * 15)
                     print("words: {}".format(words))
@@ -82,35 +81,13 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     print("=" * 15)
                     print("\n")
 
-                    """
-                    next example:
-                    ===============
-                    words: ['The', 'team', 'who', 'work', 'there', 'are', 'helpfull', ',', 'friendly', 'and', 'extremely', 'knowledgeable', 'and', 'will', 'help', 'you', 'as', 'much', 'as', 'they', 'can', 'with', 'thier', 'years', 'of', 'hands', 'on', 'practice', '.']
-                    tags: ['det', 'nsubj', 'nsubj', 'acl:relcl', 'advmod', 'cop', 'root', 'punct', 'conj', 'cc', 'advmod', 'conj', 'cc', 'aux', 'conj', 'obj', 'advmod', 'advmod', 'mark', 'nsubj', 'advcl', 'case', 'nmod:poss', 'obl', 'case', 'compound', 'compound', 'nmod', 'punct']
-                    heads: [2, 7, 4, 2, 4, 7, 0, 9, 7, 12, 12, 7, 15, 15, 7, 15, 18, 15, 21, 21, 17, 24, 24, 15, 28, 28, 26, 24, 7]
-                    deps: [[('det', 2)], [('nsubj', 4), ('nsubj', 7), ('nsubj', 9), ('nsubj', 12), ('nsubj', 15)], [('ref', 2)], [('acl:relcl', 2)], [('advmod', 4)], [('cop', 7)], [('root', 0)], [('punct', 9)], [('conj:and', 7)], [('cc', 12)], [('advmod', 12)], [('conj:and', 7)], [('cc', 15)], [('aux', 15)], [('conj:and', 7)], [('obj', 15)], [('advmod', 18)], [('advmod', 15)], [('mark', 21)], [('nsubj', 21)], [('advcl:as', 17)], [('case', 24)], [('nmod:poss', 24)], [('obl:with', 15)], [('case', 28)], [('compound', 28)], [('compound', 26)], [('nmod:of', 24)], [('punct', 7)]]
-
-
-                    list(zip(tags, heads))::
-                    [('det', 2), ('nsubj', 7), ('nsubj', 4), ('acl:relcl', 2), ('advmod', 4), ('cop', 7), ('root', 0), ('punct', 9), ('conj', 7), ('cc', 12), ('advmod', 12), ('conj', 7), ('cc', 15), ('aux', 15), ('conj', 7), ('obj', 15), ('advmod', 18), ('advmod', 15), ('mark', 21), ('nsubj', 21), ('advcl', 17), ('case', 24), ('nmod:poss', 24), ('obl', 15), ('case', 28), ('compound', 28), ('compound', 26), ('nmod', 24), ('punct', 7)]
-
-                    deps::
-                    [[('det', 2)], [('nsubj', 4), ('nsubj', 7), ('nsubj', 9), ('nsubj', 12), ('nsubj', 15)], [('ref', 2)], [('acl:relcl', 2)], [('advmod', 4)], [('cop', 7)], [('root', 0)], [('punct', 9)], [('conj:and', 7)], [('cc', 12)], [('advmod', 12)], [('conj:and', 7)], [('cc', 15)], [('aux', 15)], [('conj:and', 7)], [('obj', 15)], [('advmod', 18)], [('advmod', 15)], [('mark', 21)], [('nsubj', 21)], [('advcl:as', 17)], [('case', 24)], [('nmod:poss', 24)], [('obl:with', 15)], [('case', 28)], [('compound', 28)], [('compound', 26)], [('nmod:of', 24)], [('punct', 7)]]
-
-                    ===============
-                    """
-
-                    # need to parse deps
-
-
-
                 yield self.text_to_instance(words, pos_tags, list(zip(tags, heads)), deps)
 
     @overrides
     def text_to_instance(
         self,  # type: ignore
         words: List[str],
-        upos_tags: List[str],
+        pos_tags: List[str],
         dependencies: List[Tuple[str, int]] = None,
         deps: List[List[Tuple[str, int]]] = None,
     ) -> Instance:
@@ -125,18 +102,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             A list of  (head tag, head index) tuples. Indices are 1 indexed,
             meaning an index of 0 corresponds to that word being the root of
             the dependency tree.
+        deps : ``List[List[Tuple[str, int]]]``, optional (default = None)
+            A list of lists of (head tag, head index) tuples. Indices are 1 indexed,
+            meaning an index of 0 corresponds to that word being the root of
+            the dependency tree.       
         # Returns
         An instance containing words, upos tags, dependency head tags and head
         indices as fields.
         """
-        from itertools import chain
-
-        print(words)
-        #print(upos_tags)
-        print("DEPENDENCIES")
-        print(deps)
 
         fields: Dict[str, Field] = {}
+        
+        print("words", words)
+        print("deps", deps)
 
         if self.tokenizer is not None:
             tokens = self.tokenizer.tokenize(" ".join(words))
@@ -146,12 +124,13 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         text_field = TextField(tokens, self._token_indexers)
         fields["words"] = text_field
 
-        fields["pos_tags"] = SequenceLabelField(upos_tags, text_field, label_namespace="pos")
+        fields["pos_tags"] = SequenceLabelField(pos_tags, text_field, label_namespace="pos_tags")
 
-        if dependencies is not None:
+        if deps is not None:
             # We don't want to expand the label namespace with an additional dummy token, so we'll
             # always give the 'ROOT_HEAD' token a label of 'root'.
             
+            # create lists to populate target labels which are themselves a list of labels
             heads = []
             rels = []
 
@@ -167,61 +146,16 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     # append all current target heads/rels to a list
                     current_heads = []
                     current_rels = []
-                    for rel_head_tup in target_output:
-                        current_heads.append(rel_head_tup[1])
-                        current_rels.append(rel_head_tup[0])
+                    for rel_head_tuple in target_output:
+                        current_heads.append(rel_head_tuple[1])
+                        current_rels.append(rel_head_tuple[0])
                     heads.append(current_heads)
                     rels.append(current_rels)
 
-            print("rels", rels)
-            #print("heads", heads)
-            #print("input of Multi label field looks like")
-            #print([x[0] for x in heads])
-            
-            #for h in heads:
-            #    print("---", h)
-            #    fields["head_indices"] = h
-            
-
-            #fields["head_indices"] = ListField[ListField[LabelField]]
-            
             fields["head_tags"] = SequenceMultiLabelField(rels, label_namespace="head_tags")
             fields["head_indices"] = SequenceMultiLabelField(heads, label_namespace="head_index_tags")
-            #ListField([Listfield([LabelField([heads]])])
-            
-            #ListField([ListField[([x for x in heads]))
-            
-            
-            #ListField[ListField(LabelField([x for x in heads]))]
-            
-            #ListField([LabelField(x, "logical_form") for x in logical_form[0]])
-            
-            #MultiLabelField(
-            #    [x[0] for x in heads], skip_indexing=True, num_labels = len(heads)+1
-            #)
 
-            #fields["head_indices"] = MultiLabelField(
-            #    [x for x in heads], text_field, label_namespace="head_index_tags"
-            #)
-
-
-
-
-
-
-
-
-            
-            #ListField([
-            #        MultiLabelField(label) for label in heads
-            #        ], skip_indexing=True)
-
-            #fields["head_indices"] = SequenceLabelField(
-            #    [x for x in head_ids], text_field, label_namespace="head_index_tags"
-            #)
-
-
-            fields["metadata"] = MetadataField({"words": words, "pos": upos_tags})
+            fields["metadata"] = MetadataField({"words": words, "pos": pos_tags})
         return Instance(fields)
 
 
