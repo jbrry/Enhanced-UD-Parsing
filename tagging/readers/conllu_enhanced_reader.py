@@ -173,8 +173,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     heads.append(current_heads)
                     rels.append(current_rels)
 
-            #print("rels", rels)
-            print("heads", heads)
+            print("rels", rels)
+            #print("heads", heads)
             #print("input of Multi label field looks like")
             #print([x[0] for x in heads])
             
@@ -185,8 +185,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
             #fields["head_indices"] = ListField[ListField[LabelField]]
             
-            fields["head_indices"] = SequenceMultiLabelField(heads)
-            #fields["head_indices"] = ListField([ListField([LabelField(heads)])])
+            fields["head_tags"] = SequenceMultiLabelField(rels, label_namespace="head_tags")
+            fields["head_indices"] = SequenceMultiLabelField(heads, label_namespace="head_index_tags")
             #ListField([Listfield([LabelField([heads]])])
             
             #ListField([ListField[([x for x in heads]))
