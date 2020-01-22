@@ -114,6 +114,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         fields: Dict[str, Field] = {}
         
         print("words", words)
+        print("pos_tags", pos_tags)
+        print("dependencies", dependencies)
         print("deps", deps)
 
         if self.tokenizer is not None:
@@ -130,30 +132,52 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             # We don't want to expand the label namespace with an additional dummy token, so we'll
             # always give the 'ROOT_HEAD' token a label of 'root'.
             
-            # create lists to populate target labels which are themselves a list of labels
-            heads = []
+            # 1) create lists to populate target labels
             rels = []
-
+            heads = []
+            
             for target_output in deps:
                 # check if there is just 1 head
                 if len(target_output) == 1:
-                    head = [x[1] for x in target_output]
                     rel = [x[0] for x in target_output]
-                    heads.append(head)
+                    head = [x[1] for x in target_output]
                     rels.append(rel)
+                    heads.append(head)
                 # more than 1 head
                 else:
-                    # append all current target heads/rels to a list
-                    current_heads = []
+                    # append multiple current target heads/rels to their own lists
                     current_rels = []
+                    current_heads = []
                     for rel_head_tuple in target_output:
-                        current_heads.append(rel_head_tuple[1])
                         current_rels.append(rel_head_tuple[0])
+                        current_heads.append(rel_head_tuple[1])
                     heads.append(current_heads)
                     rels.append(current_rels)
+                    
+            # 2) need to process heads which may contain copy nodes
+            processed_heads = []
+
+            for head_list in heads:
+                # keep a list-of-lists format
+                current_heads = []
+                for head in head_list:
+                    # convert copy node tuples: (8, '.', 1) to float: 8.1
+                    if type(head) == tuple:
+                        copy_node = list(head)
+                        # join the values in the tuple
+                        copy_node = str(head[0]) + '.' + str(head[-1])   
+                        copy_node = float(copy_node)
+                        current_heads.append(copy_node)
+                    else:
+                        # regular head index
+                        current_heads.append(head)
+
+                processed_heads.append(current_heads)
+
+            assert len(words) == len(heads) == len(processed_heads)
 
             fields["head_tags"] = SequenceMultiLabelField(rels, label_namespace="head_tags")
-            fields["head_indices"] = SequenceMultiLabelField(heads, label_namespace="head_index_tags")
+            fields["head_indices"] = SequenceMultiLabelField(processed_heads, label_namespace="head_index_tags")
 
             fields["metadata"] = MetadataField({"words": words, "pos": pos_tags})
         return Instance(fields)
