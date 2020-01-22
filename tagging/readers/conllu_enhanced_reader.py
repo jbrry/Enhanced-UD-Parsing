@@ -1,5 +1,6 @@
 from typing import Dict, Tuple, List, cast
 import logging
+import collections
 
 from overrides import overrides
 from conllu import parse_incr
@@ -52,14 +53,21 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         with open(file_path, "r") as conllu_file:
             logger.info("Reading UD instances from conllu dataset at: %s", file_path)
 
+            num_copy_nodes = 0
+            
             for annotation in parse_incr(conllu_file):
-                # CoNLLU annotations sometimes add back in words that have been elided
-                # in the original sentence; we remove these, as we're just predicting
-                # dependencies for the original sentence.
-                # We filter by integers here as elided words have a non-integer word id,
-                # as parsed by the conllu python library.
-                #annotation = [x for x in annotation if isinstance(x["id"], int)]
-
+                # check for presence of copy nodes
+                contains_copy_node = [x for x in annotation if not isinstance(x["id"], int)]
+                if contains_copy_node:
+                    # count number of copy nodes in misc column
+                    misc = [x["misc"] for x in annotation]
+                    for misc_item in misc:
+                        if misc_item is not None:
+                            vals = list(misc_item.items())
+                            for val in vals:
+                                if "CopyOf" in val:
+                                    num_copy_nodes += 1
+                
                 heads = [x["head"] for x in annotation]
                 tags = [x["deprel"] for x in annotation]
                 
@@ -82,6 +90,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     print("\n")
 
                 yield self.text_to_instance(words, pos_tags, list(zip(tags, heads)), deps)
+                
+        logger.info("Found %s copy nodes ", num_copy_nodes)
 
     @overrides
     def text_to_instance(
@@ -113,10 +123,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         fields: Dict[str, Field] = {}
         
-        print("words", words)
-        print("pos_tags", pos_tags)
-        print("dependencies", dependencies)
-        print("deps", deps)
+
 
         if self.tokenizer is not None:
             tokens = self.tokenizer.tokenize(" ".join(words))
@@ -165,7 +172,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     if type(head) == tuple:
                         copy_node = list(head)
                         # join the values in the tuple
-                        copy_node = str(head[0]) + '.' + str(head[-1])   
+                        copy_node = str(head[0]) + '.' + str(head[-1])
                         copy_node = float(copy_node)
                         current_heads.append(copy_node)
                     else:
@@ -175,6 +182,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 processed_heads.append(current_heads)
 
             assert len(words) == len(heads) == len(processed_heads)
+
+#            print("words", words)
+#            print("pos_tags", pos_tags)
+#            print("dependencies", dependencies)
+#            print("deps", deps)
+#            print("processed heads", processed_heads)
 
             fields["head_tags"] = SequenceMultiLabelField(rels, label_namespace="head_tags")
             fields["head_indices"] = SequenceMultiLabelField(processed_heads, label_namespace="head_index_tags")
