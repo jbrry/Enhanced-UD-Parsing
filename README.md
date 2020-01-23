@@ -1,3 +1,13 @@
-# allennlp-tutorial-practice
+# Enhanced UD Parsing
 
-My version to follow along with the tutorial [AllenNLP the hard way](https://jbarrow.ai/allennlp-the-hard-way-0/).
+Code for enhanced UD parsing for the IWPT/UD shared task.
+
+### Modifications
+- parsing the `deps` column instead of `dep-rels` and `heads`.
+- parse `deps` into correct format
+- create a SequenceMultiLabelField to store data in list-of-lists format, e.g. for sequence labelling with multiple labels.
+
+Run code in its current format:
+```
+allennlp train -f -s output/reader configs/enhanced_ud_parser.jsonnet --include-package tagging
+```
