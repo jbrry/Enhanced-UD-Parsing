@@ -6,6 +6,7 @@ import torch
 
 from allennlp.data.fields.field import Field
 from allennlp.data.fields.sequence_field import SequenceField
+#from allennlp.data.fields.list_field import sequence_length
 from allennlp.data.vocabulary import Vocabulary
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import pad_sequence_to_length
@@ -58,48 +59,20 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
         self,
         labels: Sequence[Sequence[Union[str, int]]],
         #labels: List[List[Union[str, int]]],
-        #sequence_field: SequenceField,
+        sequence_field: SequenceField,
         label_namespace: str = "labels",
         skip_indexing: bool = False,
         num_labels: Optional[int] = None,
     ) -> None:
         self.labels = labels
+        self._sequence_field = sequence_field
         self._label_namespace = label_namespace
         self._label_ids = None
         self._maybe_warn_for_namespace(label_namespace)
         self._num_labels = num_labels
 
         
-#        if skip_indexing and self.labels:
-        
-#            # first check if its a list
-#            if not all(isinstance(label, list) for label in labels):
-#                raise ConfigurationError(
-#                    "SequenceMultiLabelFields expects lists if skip_indexing=False. "
-#                    "Found labels: {}".format(labels)   
-#                )
-#            
-        
-#            # then check each item in the list is an int...
-#            for li in labels:
-#                if not all(isinstance(label, int) for label in li):
-#                    raise ConfigurationError(
-#                        "In order to skip indexing, your labels must be integers. "
-#                        "Found labels = {}".format(labels)
-#                )
-#            if not num_labels:
-#                raise ConfigurationError("In order to skip indexing, num_labels can't be None.")
-#
-#            if not all(cast(int, label) < num_labels for label in labels):
-#                raise ConfigurationError(
-#                    "All labels should be < num_labels. "
-#                    "Found num_labels = {} and labels = {} ".format(num_labels, labels)
-#                )
-#
-#            self._label_ids = labels
-#        else:
-            # first check if its a list
-            
+        # NOTE: see MLF for more thorough checks.   
             
         if not all(isinstance(label, list) for label in labels):
             raise ConfigurationError(
@@ -122,7 +95,6 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
                         "SequenceMultiLabelFields expects string labels if skip_indexing=False."
                         "Found labels: {}".format(labels)
                 )
-
                 
     def _maybe_warn_for_namespace(self, label_namespace: str) -> None:
         if not (label_namespace.endswith("labels") or label_namespace.endswith("tags")):
@@ -135,7 +107,7 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
                     self._label_namespace,
                 )
                 self._already_warned_namespaces.add(label_namespace)
-                
+
     @overrides
     def count_vocab_items(self, counter: Dict[str, Dict[str, int]]):
         if self._label_ids is None:
@@ -146,28 +118,35 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
     @overrides
     def index(self, vocab: Vocabulary):
         if self._label_ids is None:
+            print("self.labels", self.labels)
+            self._label_ids = []
             for li in self.labels:
+                current_labels = []
                 # TODO: need to be careful I am not overwriting self._label_ids
-                self._label_ids = [vocab.get_token_index(label, self._label_namespace) # type: ignore
+                current_labels = [vocab.get_token_index(label, self._label_namespace) # type: ignore
                     for label in li]
+                self._label_ids.append(current_labels)
+        
+        print("self._label_ids", self._label_ids)
         if not self._num_labels:
             self._num_labels = vocab.get_vocab_size(self._label_namespace)
-            
+            print("found num labels {}".format(self._num_labels))
+    
     @overrides
     def get_padding_lengths(self) -> Dict[str, int]:
-        return {}
-        # SLF:
-        # return {"num_tokens": self.sequence_field.sequence_length()}
-    
+        return {"num_tokens": len(self._sequence_field)}
+
     @overrides
     def as_tensor(self, padding_lengths: Dict[str, int]) -> torch.Tensor:
-        # quite different in SLF (see there for diffs)
-        tensor = torch.zeros(self._num_labels, dtype=torch.long)  # vector of zeros
-        if self._label_ids:
-            tensor.scatter_(0, torch.LongTensor(self._label_ids), 1)
+        #tensor = torch.zeros(self._num_labels, dtype=torch.long)  # vector of zeros
 
-        return tensor
-    
+        if self._label_ids:
+            for li in self._label_ids:
+                tensor = torch.LongTensor(self._label_ids)
+                print(tensor)
+
+        return tensor    
+
     @overrides
     def empty_field(self):
         # quite different in SLF (see there for diffs)

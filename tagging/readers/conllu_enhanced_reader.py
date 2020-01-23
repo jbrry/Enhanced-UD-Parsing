@@ -189,8 +189,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 #            print("deps", deps)
 #            print("processed heads", processed_heads)
 
-            fields["head_tags"] = SequenceMultiLabelField(rels, label_namespace="head_tags")
-            fields["head_indices"] = SequenceMultiLabelField(processed_heads, label_namespace="head_index_tags")
+            fields["head_tags"] = SequenceMultiLabelField(rels, rels, label_namespace="head_tags")
+            fields["head_indices"] = SequenceMultiLabelField(processed_heads, heads, label_namespace="head_index_tags")
 
             fields["metadata"] = MetadataField({"words": words, "pos": pos_tags})
         return Instance(fields)
