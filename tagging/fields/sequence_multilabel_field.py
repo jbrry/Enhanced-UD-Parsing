@@ -149,6 +149,7 @@ class SequenceMultiLabelField(Field[torch.Tensor]):
                 tensor = torch.LongTensor(padded_tags)
                 tensors.append(tensor)            
             tensor = torch.stack(tensors)
+            # need to pad the 1st dim so they can be stacked later
             print(tensor)
             return tensor
 
