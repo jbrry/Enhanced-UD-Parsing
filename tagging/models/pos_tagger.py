@@ -17,10 +17,12 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator
 from allennlp.nn.util import get_text_field_mask, sequence_cross_entropy_with_logits
 from allennlp.training.metrics import CategoricalAccuracy
 from tagging.nn.util import nested_sequence_cross_entropy_with_logits
-from tagging.nn.util import get_label_field_mask
-
+from tagging.training.enhanced_attachment_scores import EnhancedAttachmentScores
+from tagging.training.enhanced_categorical_accuracy import EnhancedCategoricalAccuracy
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+POS_TO_IGNORE = {'``', "''", ':', ',', '.', 'PU', 'PUNCT', 'SYM'}
 
 @Model.register("pos_tagger")
 class PosTagger(Model):
@@ -63,6 +65,13 @@ class PosTagger(Model):
         self.num_classes_tags = self.vocab.get_vocab_size(self.label_namespace_tags)
         
         
+        tags = self.vocab.get_token_to_index_vocabulary("pos_tags")
+        punctuation_tag_indices = {tag: index for tag, index in tags.items() if tag in POS_TO_IGNORE}
+        self._pos_to_ignore = set(punctuation_tag_indices.values())
+        logger.info(f"Found POS tags corresponding to the following punctuation : {punctuation_tag_indices}. "
+                    "Ignoring words with these POS tags for evaluation.")
+        
+        
         logger.info(f"found num classes pos  : {self.num_classes_pos}")
         logger.info(f"found num classes tags  : {self.num_classes_tags}")
         
@@ -83,6 +92,9 @@ class PosTagger(Model):
                 "accuracy": CategoricalAccuracy(),
                 "accuracy3": CategoricalAccuracy(top_k=3)
         }
+        
+        #self._enhanced_attachment_scores = EnhancedAttachmentScores()
+        self._enhanced_accuracy = EnhancedCategoricalAccuracy()
 
         initializer(self)
 
@@ -108,8 +120,7 @@ class PosTagger(Model):
             token in your input.
         pos_tags : torch.LongTensor, optional (default = None)
             A torch tensor representing the sequence of integer gold class labels of shape
-            ``(batch_size, num_tokens)``.
-            
+            ``(batch_size, num_tokens)``.            
         head_tags : torch.LongTensor, optional (default = None)
             A torch tensor representing the sequence of integer gold class tags of shape
             ``(batch_size, num_tokens, max_padding_dim)``.        
@@ -186,23 +197,31 @@ class PosTagger(Model):
                        }
 
         if pos_tags is not None:
-            #criterion = nn.CrossEntropyLoss()
-            #pos_loss = criterion(pos_logits, pos_tags)
             pos_loss = sequence_cross_entropy_with_logits(pos_logits, pos_tags, mask)
             for metric in self.metrics.values():
                 metric(pos_logits, pos_tags, mask.float())
             output_dict["loss"] = pos_loss
             
-        print(head_tags.shape)    
+        #print(head_tags.shape)    
         #print(head_tags)
         if head_tags is not None:
-            #criterion = nn.MultiLabelSoftMarginLoss()            
-            #RuntimeError: The size of tensor a (3) must match the size of tensor b (62) at non-singleton dimension 2
-            tag_loss = nested_sequence_cross_entropy_with_logits(tag_logits, head_tags, mask)
-#            for metric in self.metrics.values():
-#                metric(tag_logits, head_tags, mask.float())
             
+            self._enhanced_accuracy(tag_logits, head_tags, mask.float())
+
+            #evaluation_mask = self._get_mask_for_eval(mask, pos_tags)
+            # We calculate attatchment scores for the whole sentence
+            # but excluding the symbolic ROOT token at the start,
+            # which is why we start from the second element in the sequence.
+            #self._enhanced_attachment_scores(predicted_head_tags, head_tags)
+            #self._3d_categorical_accuracy(tag_logits, head_tags, mask.float())
+                     
+            #tag_loss = nested_sequence_cross_entropy_with_logits(tag_logits, head_tags, mask)          
             #output_dict["loss"] = tag_loss
+
+
+
+
+
 
         if metadata is not None:
             output_dict["words"] = [x["words"] for x in metadata]
@@ -248,6 +267,32 @@ class PosTagger(Model):
 #            all_tags.append(head_tags)
 #        output_dict['head_tags'] = all_tags
 #        return output_dict
+
+
+    def _get_mask_for_eval(self,
+                           mask: torch.LongTensor,
+                           pos_tags: torch.LongTensor) -> torch.LongTensor:
+        """
+        Dependency evaluation excludes words are punctuation.
+        Here, we create a new mask to exclude word indices which
+        have a "punctuation-like" part of speech tag.
+        Parameters
+        ----------
+        mask : ``torch.LongTensor``, required.
+            The original mask.
+        pos_tags : ``torch.LongTensor``, required.
+            The pos tags for the sequence.
+        Returns
+        -------
+        A new mask, where any indices equal to labels
+        we should be ignoring are masked.
+        """
+        new_mask = mask.detach()
+        for label in self._pos_to_ignore:
+            label_mask = pos_tags.eq(label).long()
+            new_mask = new_mask * (1 - label_mask)
+        return new_mask
+
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
