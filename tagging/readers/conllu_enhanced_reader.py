@@ -138,6 +138,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         fields["pos_tags"] = SequenceLabelField(pos_tags, text_field, label_namespace="pos_tags")
         
+        
         # regular
 #        if dependencies is not None:
 #            # We don't want to expand the label namespace with an additional dummy token, so we'll
@@ -157,6 +158,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             # 1) create lists to populate target labels
             rels = []
             heads = []
+            n_heads = []
             
             for target_output in deps:
                 # check if there is just 1 head
@@ -165,6 +167,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     head = [x[1] for x in target_output]
                     rels.append(rel)
                     heads.append(head)
+                    n_heads.append(1)
                 # more than 1 head
                 else:
                     # append multiple current target heads/rels to their own lists
@@ -175,6 +178,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                         current_heads.append(rel_head_tuple[1])
                     heads.append(current_heads)
                     rels.append(current_rels)
+                    n_heads.append(len(current_heads))
                     
             # 2) need to process heads which may contain copy nodes
             processed_heads = []
@@ -196,7 +200,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
                 processed_heads.append(current_heads)
 
-            assert len(words) == len(heads) == len(processed_heads)
+            assert len(words) == len(heads) == len(processed_heads) == len(n_heads)
+
 
             print("words", words)
             print("pos_tags", pos_tags)
@@ -204,8 +209,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             print("deps", deps)
             #print("processed heads", processed_heads)
             print("heads", heads)
+            print("n heads", n_heads)
 
-
+            fields["num_heads"] = SequenceLabelField(n_heads, text_field, label_namespace="head_num_tags")
             
             # head_tags : ListField[ListField[LabelField]]
             sublist_fields = []
@@ -223,17 +229,10 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 sublist_fields.append(label_fields)
             fields["head_indices"] = ListField(sublist_fields)
             
-            #category_field: ListField[LabelField] = []
-                     
-            #for label_list in rels:
-            #    category_field.append(LabelField([(l) for l in label_list], "head2_tags"))            
-            #category_field = ListField(category_field)
-            #fields["head2_tags"] = ListField(category_field)
-        
 
+        
             #fields["head_tags"] = SequenceMultiLabelField(rels, text_field, label_namespace="head_tags")
             #fields["head_indices"] = SequenceMultiLabelField(heads, text_field, label_namespace="head_index_tags")
-            #print(fields["head_indices"])
 
             fields["metadata"] = MetadataField({"words": words, "pos": pos_tags})
         return Instance(fields)
