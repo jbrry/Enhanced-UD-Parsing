@@ -21,8 +21,8 @@ local cuda_device = -1;
         }
       }
     },
-  train_data_path: 'data/UD_English-EWT/en_ewt-ud-test_sample.conllu',
-//  validation_data_path: 'data/UD_English-EWT/en_ewt-ud-dev.conllu',
+  train_data_path: 'data/UD_English-EWT/train_sample.conllu',
+  validation_data_path: 'data/UD_English-EWT/test_sample.conllu',
 //  test_data_path: 'data/UD_English-EWT/en_ewt-ud-test.conllu',
   "model": {
       "type": "pos_tagger",
@@ -67,7 +67,7 @@ local cuda_device = -1;
     "trainer": {
       "num_epochs": num_epochs,
       "grad_norm": 5.0,
-      "patience": 10,
+      "patience": 50,
       "cuda_device": cuda_device,
       "validation_metric": "+accuracy",
       "num_serialized_models_to_keep": 3,

@@ -98,8 +98,9 @@ class PosTagger(Model):
                                "text field embedding dim", "encoder input dim")
 
         self.metrics = {
-                "accuracy": CategoricalAccuracy(),
-                "accuracy3": CategoricalAccuracy(top_k=3)
+                "accuracy": EnhancedCategoricalAccuracy()
+                #"accuracy": CategoricalAccuracy()
+                #"accuracy3": CategoricalAccuracy(top_k=3)
         }
         
         #self._enhanced_attachment_scores = EnhancedAttachmentScores()
@@ -188,9 +189,9 @@ class PosTagger(Model):
         # - INFO - tagging.models.pos_tagger - tag logits size : torch.Size([32, 22, 62])
         logger.info(f"tag logits size : {tag_logits_size}")
 
-        print(num_heads)
-        print("num logits", num_logits)
-        print("tag logits", tag_logits)
+        #print(num_heads)
+        #print("num logits", num_logits)
+        #print("tag logits", tag_logits)
         #reshaped_num_log_probs = num_logits.view(-1, self.num_classes_num_heads)
         #reshaped_num_logits_size = reshaped_num_log_probs.size()
         # - INFO - tagging.models.pos_tagger - reshaped pos logits size : torch.Size([704, 16])
@@ -209,7 +210,7 @@ class PosTagger(Model):
         
         
         num_class_probabilities = F.softmax(num_logits, dim =-1)
-        print("nc probs", num_class_probabilities)
+        #print("nc probs", num_class_probabilities)
         
         #.view([batch_size,
         #                                                                  sequence_length,
@@ -236,17 +237,17 @@ class PosTagger(Model):
             #output_dict["loss"] = pos_loss
             
             
-        if pos_tags is not None:
-            pos_loss = sequence_cross_entropy_with_logits(pos_logits, pos_tags, mask)
-            for metric in self.metrics.values():
-                metric(pos_logits, pos_tags, mask.float())
-            output_dict["loss"] = pos_loss
+#        if pos_tags is not None:
+#            pos_loss = sequence_cross_entropy_with_logits(pos_logits, pos_tags, mask)
+#            for metric in self.metrics.values():
+#                metric(pos_logits, pos_tags, mask.float())
+#            output_dict["loss"] = pos_loss
             
         #print(head_tags.shape)    
         #print(head_tags)
-        #if head_tags is not None:
+        if head_tags is not None:
             
-            #self._enhanced_accuracy(tag_logits, head_tags, mask.float())
+            self._enhanced_accuracy(tag_logits, head_tags, mask.float())
 
             #evaluation_mask = self._get_mask_for_eval(mask, pos_tags)
             # We calculate attatchment scores for the whole sentence
@@ -255,13 +256,8 @@ class PosTagger(Model):
             #self._enhanced_attachment_scores(predicted_head_tags, head_tags)
             #self._3d_categorical_accuracy(tag_logits, head_tags, mask.float())
                      
-            #tag_loss = nested_sequence_cross_entropy_with_logits(tag_logits, head_tags, mask)          
-            #output_dict["loss"] = tag_loss
-
-
-
-
-
+            tag_loss = nested_sequence_cross_entropy_with_logits(tag_logits, head_tags, mask)          
+            output_dict["loss"] = tag_loss
 
         if metadata is not None:
             output_dict["words"] = [x["words"] for x in metadata]
@@ -278,7 +274,7 @@ class PosTagger(Model):
         Does a simple position-wise argmax over each token, converts indices to string labels, and
         adds a ``"tags"`` key to the dictionary with the result.
         """
-        all_predictions = output_dict['class_probabilities']
+        all_predictions = output_dict['tag_class_probabilities']
         all_predictions = all_predictions.cpu().data.numpy()
         if all_predictions.ndim == 3:
             predictions_list = [all_predictions[i] for i in range(all_predictions.shape[0])]
@@ -287,10 +283,10 @@ class PosTagger(Model):
         all_tags = []
         for predictions in predictions_list:
             argmax_indices = numpy.argmax(predictions, axis=-1)
-            pos_tags = [self.vocab.get_token_from_index(x, namespace="pos")
+            head_tags = [self.vocab.get_token_from_index(x, namespace="head_tags")
                     for x in argmax_indices]
-            all_tags.append(pos_tags)
-        output_dict['pos'] = all_tags
+            all_tags.append(head_tags)
+        output_dict["head_tags"] = all_tags
         return output_dict
     
 #        all_predictions = output_dict['class_probabilities']
@@ -307,31 +303,6 @@ class PosTagger(Model):
 #            all_tags.append(head_tags)
 #        output_dict['head_tags'] = all_tags
 #        return output_dict
-
-
-    def _get_mask_for_eval(self,
-                           mask: torch.LongTensor,
-                           pos_tags: torch.LongTensor) -> torch.LongTensor:
-        """
-        Dependency evaluation excludes words are punctuation.
-        Here, we create a new mask to exclude word indices which
-        have a "punctuation-like" part of speech tag.
-        Parameters
-        ----------
-        mask : ``torch.LongTensor``, required.
-            The original mask.
-        pos_tags : ``torch.LongTensor``, required.
-            The pos tags for the sequence.
-        Returns
-        -------
-        A new mask, where any indices equal to labels
-        we should be ignoring are masked.
-        """
-        new_mask = mask.detach()
-        for label in self._pos_to_ignore:
-            label_mask = pos_tags.eq(label).long()
-            new_mask = new_mask * (1 - label_mask)
-        return new_mask
 
 
     @overrides
