@@ -1,9 +1,9 @@
-local word_embedding_dim = 100;
-local char_embedding_dim = 64;
-local pos_embedding_dim = 50;
+local word_embedding_dim = 50;
+local char_embedding_dim = 16;
+local pos_embedding_dim = 25;
 local embedding_dim = word_embedding_dim + pos_embedding_dim + char_embedding_dim + char_embedding_dim;
-local hidden_dim = 400;
-local num_epochs = 50;
+local hidden_dim = 200;
+local num_epochs = 20;
 local patience = 10;
 local batch_size = 32;
 local learning_rate = 0.001;
@@ -11,6 +11,7 @@ local learning_rate = 0.001;
 {
   "dataset_reader":{
     "type":"universal_dependencies",
+    //"type":"universal_dependencies_enhanced",
       "token_indexers": {
         "tokens": { 
         "type": "single_id" 
@@ -21,18 +22,17 @@ local learning_rate = 0.001;
         }
       }
     },
-    "train_data_path": 'data/UD_English-EWT/en_ewt-ud-train_sample.conllu',
+    "train_data_path": 'data/UD_English-EWT/en_ewt-ud-train.conllu',
+    //"train_data_path": 'data/UD_English-EWT/en_ewt-ud-train_sample.conllu',
     //"validation_data_path":  std.extVar("DEV_DATA_PATH"),
     "model": {
+      //"type": "biaffine_parser_enhanced",
       "type": "biaffine_parser",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {
             "type": "embedding",
-            "embedding_dim": word_embedding_dim,
-            "pretrained_file": std.extVar("VECS_PATH"),
-            "trainable": true,
-            "sparse": true
+            "embedding_dim": word_embedding_dim
            },
            "token_characters": {
              "type": "character_encoding",
@@ -86,8 +86,8 @@ local learning_rate = 0.001;
     "trainer": {
       "num_epochs": num_epochs,
       "grad_norm": 5.0,
-      "patience": 50,
-      "cuda_device": 0,
+      "patience": 1,
+      "cuda_device": -1,
       "validation_metric": "+LAS",
       "num_serialized_models_to_keep": 3,
       "optimizer": {

@@ -126,8 +126,6 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         fields: Dict[str, Field] = {}
         
-
-
         if self.tokenizer is not None:
             tokens = self.tokenizer.tokenize(" ".join(words))
         else:
@@ -135,20 +133,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         text_field = TextField(tokens, self._token_indexers)
         fields["words"] = text_field
-
+        
         fields["pos_tags"] = SequenceLabelField(pos_tags, text_field, label_namespace="pos_tags")
         
-        
         # regular
-#        if dependencies is not None:
-#            # We don't want to expand the label namespace with an additional dummy token, so we'll
-#            # always give the 'ROOT_HEAD' token a label of 'root'.
-#            fields["normal_head_tags"] = SequenceLabelField(
-#                [x[0] for x in dependencies], text_field, label_namespace="head_tags"
-#            )
-#            fields["normal_head_indices"] = SequenceLabelField(
-#                [x[1] for x in dependencies], text_field, label_namespace="head_index_tags"
-#            )
+        if dependencies is not None:
+            # We don't want to expand the label namespace with an additional dummy token, so we'll
+            # always give the 'ROOT_HEAD' token a label of 'root'.
+            fields["head_tags"] = SequenceLabelField(
+                [x[0] for x in dependencies], text_field, label_namespace="head_tags"
+            )
+            fields["head_indices"] = SequenceLabelField(
+                [x[1] for x in dependencies], text_field, label_namespace="head_index_tags"
+            )
 
 
         if deps is not None:
@@ -203,40 +200,38 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             assert len(words) == len(heads) == len(processed_heads) == len(n_heads)
 
 
-            print("words", words)
-            print("pos_tags", pos_tags)
-            print("dependencies", dependencies)
-            print("deps", deps)
-            #print("processed heads", processed_heads)
-            print("heads", heads)
-            print("n heads", n_heads)
+            if self.print_data:
+                print("words", words)
+                print("pos_tags", pos_tags)
+                print("dependencies", dependencies)
+                print("deps", deps)
+                #print("processed heads", processed_heads)
+                print("heads", heads)
+                print("n heads", n_heads)
 
-            fields["num_heads"] = SequenceLabelField(n_heads, text_field, label_namespace="head_num_tags")
             
             # head_tags : ListField[ListField[LabelField]]
-            sublist_fields = []
-            for label_list in rels:
-                label_fields = ListField([LabelField(label, label_namespace="head_tags")
-                                      for label in label_list])   
-                sublist_fields.append(label_fields)
-            fields["head_tags"] = ListField(sublist_fields)
+            #sublist_fields = []
+            #for label_list in rels:
+            #    label_fields = ListField([LabelField(label, label_namespace="enhanced_head_tags")
+            #                          for label in label_list])   
+            #    sublist_fields.append(label_fields)
+            #fields["enhanced_head_tags"] = ListField(sublist_fields)
             
             # head_indices : ListField[ListField[LabelField]]
-            sublist_fields = []
-            for label_list in processed_heads:
-                label_fields = ListField([LabelField(label, label_namespace="head_index_tags", skip_indexing=True)
-                                      for label in label_list])   
-                sublist_fields.append(label_fields)
-            fields["head_indices"] = ListField(sublist_fields)
+            #sublist_fields = []
+            #for label_list in processed_heads:
+            #    label_fields = ListField([LabelField(label, label_namespace="enhanced_head_index_tags", skip_indexing=True)
+            #                          for label in label_list])   
+            #    sublist_fields.append(label_fields)
+            #fields["enhanced_head_indices"] = ListField(sublist_fields)
             
-
         
             #fields["head_tags"] = SequenceMultiLabelField(rels, text_field, label_namespace="head_tags")
             #fields["head_indices"] = SequenceMultiLabelField(heads, text_field, label_namespace="head_index_tags")
 
+            #fields["num_heads"] = SequenceLabelField(n_heads, text_field, label_namespace="head_num_tags")
+            
             fields["metadata"] = MetadataField({"words": words, "pos": pos_tags})
         return Instance(fields)
-
-
-
 
