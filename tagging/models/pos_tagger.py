@@ -278,7 +278,7 @@ class PosTagger(Model):
         Does a simple position-wise argmax over each token, converts indices to string labels, and
         adds a ``"tags"`` key to the dictionary with the result.
         """
-        all_predictions = output_dict['tag_class_probabilities']
+        all_predictions = output_dict['enhanced_tag_class_probabilities']
         all_predictions = all_predictions.cpu().data.numpy()
         if all_predictions.ndim == 3:
             predictions_list = [all_predictions[i] for i in range(all_predictions.shape[0])]

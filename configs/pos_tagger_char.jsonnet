@@ -22,7 +22,7 @@ local cuda_device = -1;
       }
     },
   train_data_path: 'data/UD_English-EWT/train_sample.conllu',
-  validation_data_path: 'data/UD_English-EWT/test_sample.conllu',
+//  validation_data_path: 'data/UD_English-EWT/test_sample.conllu',
 //  test_data_path: 'data/UD_English-EWT/en_ewt-ud-test.conllu',
   "model": {
       "type": "pos_tagger",

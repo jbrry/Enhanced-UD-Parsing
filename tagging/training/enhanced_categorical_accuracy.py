@@ -104,6 +104,8 @@ class EnhancedCategoricalAccuracy(Metric):
             #print("top k shape", top_k.shape)
             #print("g shape", g.shape)
             
+            print("top k ", top_k)
+            print("gold ", gold_labels)
             correct = top_k.eq(gold_labels).float()
             #print("correct", correct)
         else:
@@ -122,9 +124,9 @@ class EnhancedCategoricalAccuracy(Metric):
 
         if mask is not None:
             correct *= mask.view(-1, 1).float()
-            print("c2", correct)
+            #print("c2", correct)
             self.total_count += mask.sum()
-            print(self.total_count)
+            #print(self.total_count)
         else:
             self.total_count += gold_labels.numel()
         self.correct_count += correct.sum()
