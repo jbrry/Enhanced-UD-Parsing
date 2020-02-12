@@ -35,7 +35,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         self,
         token_indexers: Dict[str, TokenIndexer] = None,
         use_language_specific_pos: bool = False,
-        print_data: bool = False,
+        print_data: bool = True,
         tokenizer: Tokenizer = None,
         lazy: bool = False,
     ) -> None:
@@ -211,20 +211,20 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
             
             # head_tags : ListField[ListField[LabelField]]
-            #sublist_fields = []
-            #for label_list in rels:
-            #    label_fields = ListField([LabelField(label, label_namespace="enhanced_head_tags")
-            #                          for label in label_list])   
-            #    sublist_fields.append(label_fields)
-            #fields["enhanced_head_tags"] = ListField(sublist_fields)
+            sublist_fields = []
+            for label_list in rels:
+                label_fields = ListField([LabelField(label, label_namespace="enhanced_head_tags")
+                                      for label in label_list])   
+                sublist_fields.append(label_fields)
+            fields["enhanced_head_tags"] = ListField(sublist_fields)
             
             # head_indices : ListField[ListField[LabelField]]
-            #sublist_fields = []
-            #for label_list in processed_heads:
-            #    label_fields = ListField([LabelField(label, label_namespace="enhanced_head_index_tags", skip_indexing=True)
-            #                          for label in label_list])   
-            #    sublist_fields.append(label_fields)
-            #fields["enhanced_head_indices"] = ListField(sublist_fields)
+            sublist_fields = []
+            for label_list in processed_heads:
+                label_fields = ListField([LabelField(label, label_namespace="enhanced_head_index_tags", skip_indexing=True)
+                                      for label in label_list])   
+                sublist_fields.append(label_fields)
+            fields["enhanced_head_indices"] = ListField(sublist_fields)
             
         
             #fields["head_tags"] = SequenceMultiLabelField(rels, text_field, label_namespace="head_tags")

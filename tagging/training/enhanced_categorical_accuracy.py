@@ -52,12 +52,12 @@ class EnhancedCategoricalAccuracy(Metric):
         
        
         #print(gold_labels)
-        print("gl 1 size", gold_labels.size())
+        #print("gl 1 size", gold_labels.size())
         # shape : (batch * seq_len * num_labels)
         
         gold_labels = gold_labels.view(-1, gold_labels.size(-1))
-        print("gl 2 size", gold_labels.size())
-        print("gl 2", gold_labels)
+        #print("gl 2 size", gold_labels.size())
+        #print("gl 2", gold_labels)
 
         # shape : (batch * seq_len, num_classes)
         predictions = predictions.view((-1, num_classes))
@@ -81,7 +81,7 @@ class EnhancedCategoricalAccuracy(Metric):
                 # shape (batch * seq_len, 1)
                 # should be the index element of highest prediction
                 top_k = predictions.max(-1)[1].unsqueeze(-1)
-                print("top k", top_k)
+                #print("top k", top_k)
             else:
                 # shape (b * seq_len, top_k)
                 top_k = predictions.topk(min(self._top_k, predictions.shape[-1]), -1)[1]
@@ -101,11 +101,11 @@ class EnhancedCategoricalAccuracy(Metric):
             # need to drop the 0s in num_labels
             
             #correct = top_k.eq(gold_labels.unsqueeze(-1)).float()
-            print("top k shape", top_k.shape)
+            #print("top k shape", top_k.shape)
             #print("g shape", g.shape)
             
             correct = top_k.eq(gold_labels).float()
-            print("correct", correct)
+            #print("correct", correct)
         else:
             # prediction is correct if gold label falls on any of the max scores. distribute score by tie_counts
             max_predictions = predictions.max(-1)[0]
@@ -139,10 +139,8 @@ class EnhancedCategoricalAccuracy(Metric):
         """
         print(self.total_count)
         if self.total_count > 1e-12:
-            print("it is")
             accuracy = float(self.correct_count) / float(self.total_count)
         else:
-            print("it is not")
             accuracy = 0.0
         if reset:
             self.reset()

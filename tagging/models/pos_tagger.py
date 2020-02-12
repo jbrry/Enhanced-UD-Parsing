@@ -60,13 +60,13 @@ class PosTagger(Model):
 
 
         self.label_namespace_pos = "pos_tags"
-        self.label_namespace_tags = "head_tags"
-        self.label_namespace_heads = "head_indices"
+        self.label_namespace_enhanced_tags = "enhanced_head_tags"
+        self.label_namespace_enhanced_heads = "enhanced_head_indices"
         self.label_namespace_num_heads = "head_num_tags"
         
         self.num_classes_pos = self.vocab.get_vocab_size(self.label_namespace_pos)
-        self.num_classes_tags = self.vocab.get_vocab_size(self.label_namespace_tags)
-        self.num_classes_heads = self.vocab.get_vocab_size(self.label_namespace_heads)
+        self.num_classes_enhanced_tags = self.vocab.get_vocab_size(self.label_namespace_enhanced_tags)
+        self.num_classes_enhanced_heads = self.vocab.get_vocab_size(self.label_namespace_enhanced_heads)
         self.num_classes_num_heads = self.vocab.get_vocab_size(self.label_namespace_num_heads)
         
         
@@ -77,10 +77,10 @@ class PosTagger(Model):
         logger.info(f"Found POS tags corresponding to the following punctuation : {punctuation_tag_indices}. "
                     "Ignoring words with these POS tags for evaluation.")
                 
-        logger.info(f"found num classes pos  : {self.num_classes_pos}")
-        logger.info(f"found num classes tags  : {self.num_classes_tags}")
-        logger.info(f"found num classes heads  : {self.num_classes_heads}")
-        logger.info(f"found num classes num heads  : {self.num_classes_num_heads}")
+        #.info(f"found num classes pos  : {self.num_classes_pos}")
+        #logger.info(f"found num classes tags  : {self.num_classes_tags}")
+        #logger.info(f"found num classes heads  : {self.num_classes_heads}")
+        #logger.info(f"found num classes num heads  : {self.num_classes_num_heads}")
         
         self.encoder = encoder
         self._dropout = InputVariationalDropout(dropout)
@@ -92,7 +92,7 @@ class PosTagger(Model):
                                                            self.num_classes_pos))
         
         self.tag_projection_layer = TimeDistributed(Linear(self.encoder.get_output_dim(),
-                                                           self.num_classes_tags))
+                                                           self.num_classes_enhanced_tags))
         
         check_dimensions_match(text_field_embedder.get_output_dim(), encoder.get_input_dim(),
                                "text field embedding dim", "encoder input dim")
@@ -114,6 +114,8 @@ class PosTagger(Model):
                 pos_tags: torch.LongTensor = None,
                 head_tags: torch.LongTensor = None,
                 head_indices: torch.LongTensor = None,
+                enhanced_head_tags: torch.LongTensor = None,
+                enhanced_head_indices: torch.LongTensor = None,                
                 num_heads: torch.LongTensor = None,
                 metadata: List[Dict[str, Any]] = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
@@ -184,10 +186,10 @@ class PosTagger(Model):
         # - INFO - tagging.models.pos_tagger - pos logits size : torch.Size([32, 22, 16])
         logger.info(f"pos logits size : {pos_logits_size}")
                 
-        tag_logits = self.tag_projection_layer(encoded_text)
-        tag_logits_size = tag_logits.size()
+        enhanced_tag_logits = self.tag_projection_layer(encoded_text)
+        #enhanced_tag_logits_size = tag_logits.size()
         # - INFO - tagging.models.pos_tagger - tag logits size : torch.Size([32, 22, 62])
-        logger.info(f"tag logits size : {tag_logits_size}")
+        #logger.info(f"tag logits size : {tag_logits_size}")
 
         #print(num_heads)
         #print("num logits", num_logits)
@@ -203,10 +205,10 @@ class PosTagger(Model):
         # - INFO - tagging.models.pos_tagger - reshaped pos logits size : torch.Size([704, 16])
         logger.info(f"reshaped pos logits size : {reshaped_pos_logits_size}")
 
-        reshaped_tag_log_probs = tag_logits.view(-1, self.num_classes_tags)
-        reshaped_tag_logits_size = reshaped_tag_log_probs.size()
+        reshaped_enhanced_tag_log_probs = enhanced_tag_logits.view(-1, self.num_classes_enhanced_tags)
+        #reshaped_tag_logits_size = reshaped_tag_log_probs.size()
         # - INFO - tagging.models.pos_tagger - reshaped tag logits size : torch.Size([704, 62])
-        logger.info(f"reshaped tag logits size : {reshaped_tag_logits_size}")
+        #logger.info(f"reshaped tag logits size : {reshaped_tag_logits_size}")
         
         
         num_class_probabilities = F.softmax(num_logits, dim =-1)
@@ -216,18 +218,19 @@ class PosTagger(Model):
         #                                                                  sequence_length,
         #                                                                  self.num_classes_pos])
     
-        pos_class_probabilities = F.softmax(reshaped_pos_log_probs, dim=-1).view([batch_size,
+#        pos_class_probabilities = F.softmax(reshaped_pos_log_probs, dim=-1).view([batch_size,
+#                                                                          sequence_length,
+#                                                                          self.num_classes_pos])
+#    
+        enhanced_tag_class_probabilities = F.softmax(reshaped_enhanced_tag_log_probs, dim=-1).view([batch_size,
                                                                           sequence_length,
-                                                                          self.num_classes_pos])
-    
-        tag_class_probabilities = F.softmax(reshaped_tag_log_probs, dim=-1).view([batch_size,
-                                                                          sequence_length,
-                                                                          self.num_classes_tags])  
-    
-
-        output_dict = {"pos_logits": pos_logits, "pos_class_probabilities": pos_class_probabilities,
-                       "tag_logits": tag_logits, "tag_class_probabilities": tag_class_probabilities,
-                       "num_logits": num_logits, "num_class_probabilities": num_class_probabilities
+                                                                          self.num_classes_enhanced_tags])  
+#    
+#
+        output_dict = {
+                    #"pos_logits": pos_logits, "pos_class_probabilities": pos_class_probabilities,
+                       "enhanced_tag_logits": enhanced_tag_logits, "enhanced_tag_class_probabilities": enhanced_tag_class_probabilities
+                    #   "num_logits": num_logits, "num_class_probabilities": num_class_probabilities
                        }
 
         #if num_heads is not None:
@@ -245,9 +248,10 @@ class PosTagger(Model):
             
         #print(head_tags.shape)    
         #print(head_tags)
-        if head_tags is not None:
-            
-            self._enhanced_accuracy(tag_logits, head_tags, mask.float())
+        if enhanced_head_tags is not None:
+            for metric in self.metrics.values():
+                metric(enhanced_tag_logits, enhanced_head_tags, mask.float())
+            #self._enhanced_accuracy(enhanced_tag_logits, enhanced_head_tags, mask.float())
 
             #evaluation_mask = self._get_mask_for_eval(mask, pos_tags)
             # We calculate attatchment scores for the whole sentence
@@ -256,8 +260,8 @@ class PosTagger(Model):
             #self._enhanced_attachment_scores(predicted_head_tags, head_tags)
             #self._3d_categorical_accuracy(tag_logits, head_tags, mask.float())
                      
-            tag_loss = nested_sequence_cross_entropy_with_logits(tag_logits, head_tags, mask)          
-            output_dict["loss"] = tag_loss
+            enhanced_tag_loss = nested_sequence_cross_entropy_with_logits(enhanced_tag_logits, enhanced_head_tags, mask)          
+            output_dict["loss"] = enhanced_tag_loss
 
         if metadata is not None:
             output_dict["words"] = [x["words"] for x in metadata]
@@ -283,10 +287,10 @@ class PosTagger(Model):
         all_tags = []
         for predictions in predictions_list:
             argmax_indices = numpy.argmax(predictions, axis=-1)
-            head_tags = [self.vocab.get_token_from_index(x, namespace="head_tags")
+            head_tags = [self.vocab.get_token_from_index(x, namespace="enhanced_head_tags")
                     for x in argmax_indices]
             all_tags.append(head_tags)
-        output_dict["head_tags"] = all_tags
+        output_dict["enhanced_head_tags"] = all_tags
         return output_dict
     
 #        all_predictions = output_dict['class_probabilities']
