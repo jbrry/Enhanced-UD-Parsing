@@ -16,8 +16,7 @@
       },
       "pos_tag_embedding":{
         "embedding_dim": 100,
-        "vocab_namespace": "pos",
-        "sparse": true
+        "vocab_namespace": "pos_tags"
       },
       "encoder": {
         "type": "stacked_bidirectional_lstm",
