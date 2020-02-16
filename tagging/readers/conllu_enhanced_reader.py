@@ -208,14 +208,11 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             arc_indices = []
             arc_tags = []
             
-            for modifier, target in enumerate(dependencies):
-                label = target[0]                
-                head_index = target[1]               
-                head_id = int(head_index) -1
-                # just try 0
-                if head_id == -1:
-                    head_id = 0
-                arc_indices.append((head_id, modifier))                
+            for modifier, target in enumerate(dependencies, start=1):
+                label = target[0]
+                head_index = target[1]
+                print(head_index, "==>", modifier)
+                arc_indices.append((head_index, modifier))                
                 arc_tags.append(label)
                 
             if arc_indices is not None and arc_tags is not None:
@@ -224,7 +221,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 print("len tokens ", len(tokens))
                 print("len arc indices ", len(arc_indices))
                 print("len arc tags ", len(arc_tags))
-                fields["arc_tags"] = AdjacencyField(arc_indices, token_field, arc_tags)
+                token_field_with_root = ['root'] + tokens
+                fields["arc_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
+                print(fields["arc_tags"])
                 
             
         
