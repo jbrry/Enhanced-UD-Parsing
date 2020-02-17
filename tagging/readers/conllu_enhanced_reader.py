@@ -72,7 +72,7 @@ def _convert_deps_to_nested_sequences(deps):
                 # regular head index
                 current_heads.append(head)
             
-            processed_heads.append(current_heads)
+        processed_heads.append(current_heads)
                 
     return rels, processed_heads
 
@@ -202,79 +202,76 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 #            fields["head_indices"] = SequenceLabelField(
 #                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
 #            )
-            
+
+
         #### try regular deps
-        if dependencies is not None:
-            arc_indices = []
-            arc_tags = []
+        #if dependencies is not None:
+            #arc_indices = []
+            #arc_tags = []
             
-            for modifier, target in enumerate(dependencies, start=1):
-                label = target[0]
-                head_index = target[1]
-                print(head_index, "==>", modifier)
-                arc_indices.append((head_index, modifier))                
-                arc_tags.append(label)
+            #for modifier, target in enumerate(dependencies, start=1):
+            #    label = target[0]
+            #    head_index = target[1]
+            #    print(head_index, "==>", modifier)
+            #    arc_indices.append((head_index, modifier))                
+            #    arc_tags.append(label)
                 
-            if arc_indices is not None and arc_tags is not None:
-                print(arc_indices)
-                print(arc_tags)
+            #if arc_indices is not None and arc_tags is not None:
+            #    print(arc_indices)
+            #    print(arc_tags)
+            #    print("len tokens ", len(tokens))
+            #    print("len arc indices ", len(arc_indices))
+            #    print("len arc tags ", len(arc_tags))
+            #    token_field_with_root = ['root'] + tokens
+                #fields["arc_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
+                #print(fields["arc_tags"])
+
+
+        #### try regular model with multiple edges (enhanced) (no ROOT)
+        if deps is not None:
+            enhanced_arc_tags, enhanced_arc_indices = _convert_deps_to_nested_sequences(deps)
+
+            assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
+            
+            # labels need to be 0-indexed for AdjacencyMatrix row-column indexing.
+            # which leads to the question, how do we index a ROOT (0) node here?
+            # should we just assume that (0, 0) is always ROOT?
+            zero_indexed_arc_tags = []
+            zero_indexed_arc_indices = []
+            
+            # model multiple head-dependent relations:
+            # for each token, create an edge from the token's head(s) to it, e.g. (h, m)
+            # there can be multiple (h, m) tuples for the same modifier.
+            # CoNLLU indices start from 1
+            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.
+            
+            for modifier, heads in enumerate(enhanced_arc_indices):
+                for head in heads:
+                    head_token_index = int(head) - 1
+                    # ROOT (skip for now)
+                    if head_token_index == -1:
+                        head_token_index = 0
+                    print(head_token_index, "==>", modifier)
+                    zero_indexed_arc_indices.append((head_token_index, modifier))
+
+            for relations in enhanced_arc_tags:
+                for relation in relations:
+                    zero_indexed_arc_tags.append(relation)
+
+            assert len(zero_indexed_arc_indices) == len(zero_indexed_arc_tags), "each arc should have a label"            
+
+            #root_tokens = ["root"] + tokens
+
+            if zero_indexed_arc_indices is not None and zero_indexed_arc_tags is not None:
+                print(tokens)
+                print(zero_indexed_arc_indices)
+                print(zero_indexed_arc_tags)
                 print("len tokens ", len(tokens))
-                print("len arc indices ", len(arc_indices))
-                print("len arc tags ", len(arc_tags))
-                token_field_with_root = ['root'] + tokens
-                fields["arc_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
-                print(fields["arc_tags"])
-                
-            
-        
-        
-        
-
-        # enhanced dependency labels
-#        if deps is not None:
-#            enhanced_arc_tags, enhanced_arc_indices = _convert_deps_to_nested_sequences(deps)
-#            
-#            # labels need to be 0-indexed for AdjacencyMatrix row-column indexing.
-#            # which leads to the question, how do we index a ROOT (0) node here?
-#            zero_indexed_arc_tags = []
-#            zero_indexed_arc_indices = []
-#            
-#            # model multiple head-dependent relations
-#            # for each token, create an edge from the token's head(s) to it, e.g. (h, m)
-#            # there can be multiple (h, m) tuples for the same modifier.
-#            # CoNLLU indices start from 1
-#            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.
-#            
-#            for modifier, heads in enumerate(enhanced_arc_indices):
-#                for head in heads:
-#                    head_token_index = int(head) - 1
-#                    # ROOT (skip for now)
-#                    if head_token_index == -1:
-#                        continue
-#                    else:
-#                        zero_indexed_arc_indices.append((head_token_index, modifier))
-#
-#            for relations in enhanced_arc_tags:
-#                for relation in relations:
-#                    if relation == "root":
-#                        continue
-#                    else:
-#                        zero_indexed_arc_tags.append(relation)
-#            
-#            
-
-#            assert len(arc_indices) == len(arc_tags)            
+                print("len arc indices ", len(zero_indexed_arc_indices))
+                print("len arc tags ", len(zero_indexed_arc_tags))
+                fields["arc_tags"] = RootedAdjacencyField(zero_indexed_arc_indices, tokens, zero_indexed_arc_tags)
 
 
-#            root_tokens = ["root"] + tokens
-            
-#            if arc_indices is not None and arc_tags is not None:
-                #fields["arc_tags"] = RootedAdjacencyField(arc_indices, root_tokens)
-                # token_field
-#                fields["arc_tags"] = RootedAdjacencyField(arc_indices, token_field, arc_tags)
-
-
-        
         # If doing multi-label predictions
             # head_tags : ListField[ListField[LabelField]]
 #            sublist_fields = []
