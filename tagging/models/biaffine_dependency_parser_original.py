@@ -119,6 +119,8 @@ class BiaffineDependencyParserOriginal(Model):
         self._pos_tag_embedding = pos_tag_embedding or None
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
+        
+        # _head_sentinel (1, 1, 400) of random numbers
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
 
         representation_dim = text_field_embedder.get_output_dim()
@@ -201,6 +203,8 @@ class BiaffineDependencyParserOriginal(Model):
         mask : ``torch.LongTensor``
             A mask denoting the padded elements in the batch.
         """
+        
+        
         embedded_text_input = self.text_field_embedder(words)
         if pos_tags is not None and self._pos_tag_embedding is not None:
             embedded_pos_tags = self._pos_tag_embedding(pos_tags)
@@ -208,18 +212,28 @@ class BiaffineDependencyParserOriginal(Model):
         elif self._pos_tag_embedding is not None:
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
 
+        # mask (batch, seq_len) of 1s with active elements and 0 for padded elements
         mask = get_text_field_mask(words)
+        # will need to see what original mask looks like
+        #print("mask before", mask)
 
         predicted_heads, predicted_head_tags, mask, arc_nll, tag_nll = self._parse(
                 embedded_text_input, mask, head_tags, head_indices)
+        
+        # will need to see what new mask looks like
+        # mask (batch, seq_len + 1) of 1s with active elements and 0 for padded elements
+        # same as before but with an extra 1 on the left hand side
+        #print("mask after", mask)
 
         loss = arc_nll + tag_nll
 
         if head_indices is not None and head_tags is not None:
+            # [:] for all elements in the batch and 1: because the new mask is now seq_len + 1 so we skip the first itemw which was recently added.
             evaluation_mask = self._get_mask_for_eval(mask[:, 1:], pos_tags)
             # We calculate attatchment scores for the whole sentence
             # but excluding the symbolic ROOT token at the start,
             # which is why we start from the second element in the sequence.
+            # pred arguments skip the root but gold is as normal
             self._attachment_scores(predicted_heads[:, 1:],
                                     predicted_head_tags[:, 1:],
                                     head_indices,
@@ -269,42 +283,58 @@ class BiaffineDependencyParserOriginal(Model):
 
         # embedded_text_input: (batch, seq_len, wemb + cdim * 2 + pos dim)
         embedded_text_input = self._input_dropout(embedded_text_input)
+        print("embedded text input size", embedded_text_input.size())
         
-        # encoded_text: (batch, seq_len, hidden_dim * )
+        # encoded_text: (batch, seq_len, hidden_dim * 2)
         encoded_text = self.encoder(embedded_text_input, mask)
         
+        # e.g. (32, 39, 400)
         batch_size, _, encoding_dim = encoded_text.size()
 
         # head_sentinel: (batch, 1, hidden_dim * 2)
+        # in the below, a new element is added to the encoded text, the head tags and the heads to represent
+        # the dummy ROOT node. it means the input and output sizes will have +1 in the seq_len dim
+        # the below expands the random hs vector to batch size (repeats the number across each element in the batch)
         head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
 
         # Concatenate the head sentinel onto the sentence representation.
+        # puts the head sentinel to the start of the encoded text.
+        # encoded text is now (batch, seq_len + 1, hidden_dim * 2)
         encoded_text = torch.cat([head_sentinel, encoded_text], 1)
 
+        # new mask - concatenate a mask of new ones of (batch, 1) onto the original mask's first dimension
+        # adds a 1 to the LHS of the mask
+        # (batch, seq_len) -> (batch, seq_len + 1)
         mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
         if head_indices is not None:
             #print(head_indices)
+            # same for head_indices - add 0s to the start of head indices (one 0 per batch element) size (batch, seq_len + 1)
             head_indices = torch.cat([head_indices.new_zeros(batch_size, 1), head_indices], 1)
             #print(head_indices)
         if head_tags is not None:
+            # same for head_tags - add 0s to the start of head tags (one 0 per batch element) size (batch, seq_len + 1)
             head_tags = torch.cat([head_tags.new_zeros(batch_size, 1), head_tags], 1)
         float_mask = mask.float()
         encoded_text = self._dropout(encoded_text)
 
-        # shape (batch_size, sequence_length, arc_representation_dim)
+        # shape (batch_size, sequence_length + 1, arc_representation_dim)
         head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
         child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
 
-        # shape (batch_size, sequence_length, tag_representation_dim)
+        # shape (batch_size, sequence_length + 1, tag_representation_dim)
         head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
         child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
-        # shape (batch_size, sequence_length, sequence_length)
+        
+        # shape (batch_size, sequence_length + 1, sequence_length + 1)
         attended_arcs = self.arc_attention(head_arc_representation,
                                            child_arc_representation)
+        
+        print("attended arcs size", attended_arcs.size())
 
         minus_inf = -1e8
-        # -.0 where ones are usually otherwise the 1 is multiplid by -inf
+        # -.0 where ones are usually, otherwise the 1 is multiplid by -inf
         minus_mask = (1 - float_mask) * minus_inf
+        # add minus mask to attended arcs (masks out the 0 elements)
         attended_arcs = attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
 
         if self.training or not self.use_mst_decoding_for_validation:
