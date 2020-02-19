@@ -2,10 +2,10 @@
     "dataset_reader":{
         "type":"universal_dependencies_enhanced"
     },
-  "train_data_path": "data/UD_English-EWT/en_ewt-ud-train.conllu",
+  "train_data_path": "data/UD_English-EWT/en_ewt-ud-train_no_ellipsis.conllu",
   //"train_data_path": "data/UD_English-EWT/train_sample.conllu",
   //"validation_data_path": "data/UD_English-EWT/test_sample.conllu",
-  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev.conllu",
+  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
     "model": {
       "type": "enhanced_parser",
       "text_field_embedder": {

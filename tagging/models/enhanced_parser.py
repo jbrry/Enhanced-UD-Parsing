@@ -259,9 +259,13 @@ class EnhancedParser(Model):
             arcs.append(edges)
             arc_tags.append(edge_tags)
 
-        output_dict["arcs"] = arcs
-        print(output_dict["arcs"])
+        output_dict["arcs"] = arcs        
         output_dict["arc_tags"] = arc_tags
+        
+        print("predicted arcs and tags for tokens:")
+        print(output_dict["tokens"])
+        print(output_dict["arcs"])
+        print(output_dict["arc_tags"])
         return output_dict
 
     def _construct_loss(self,
