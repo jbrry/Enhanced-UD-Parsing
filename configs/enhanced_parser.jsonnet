@@ -3,7 +3,9 @@
         "type":"universal_dependencies_enhanced"
     },
   "train_data_path": "data/UD_English-EWT/en_ewt-ud-train.conllu",
-  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev.conllu", 
+  //"train_data_path": "data/UD_English-EWT/train_sample.conllu",
+  //"validation_data_path": "data/UD_English-EWT/test_sample.conllu",
+  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev.conllu",
     "model": {
       "type": "enhanced_parser",
       "text_field_embedder": {
@@ -21,7 +23,7 @@
       "encoder": {
         "type": "stacked_bidirectional_lstm",
         "input_size": 150,
-        "hidden_size": 400,
+        "hidden_size": 200,
         "num_layers": 3,
         "recurrent_dropout_probability": 0.3,
         "use_highway": true

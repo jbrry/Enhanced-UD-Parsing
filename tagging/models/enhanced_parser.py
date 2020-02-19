@@ -109,6 +109,9 @@ class EnhancedParser(Model):
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
 
+        # add a head sentinel to accommodate for extra root token
+        self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
+
         representation_dim = text_field_embedder.get_output_dim()
         if pos_tag_embedding is not None:
             representation_dim += pos_tag_embedding.get_output_dim()
@@ -159,11 +162,24 @@ class EnhancedParser(Model):
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
 
         mask = get_text_field_mask(tokens)
+
         embedded_text_input = self._input_dropout(embedded_text_input)
         encoded_text = self.encoder(embedded_text_input, mask)
 
         float_mask = mask.float()
         encoded_text = self._dropout(encoded_text)
+
+        batch_size, _, encoding_dim = encoded_text.size()
+        print(batch_size, _, encoding_dim)
+
+        head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
+
+        # Concatenate the head sentinel onto the sentence representation.
+        encoded_text = torch.cat([head_sentinel, encoded_text], 1)
+        mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
+
+        #mask = self._get_mask_for_eval(mask[:, 1:], pos_tags)
+        float_mask = mask.float()
 
         # shape (batch_size, sequence_length, arc_representation_dim)
         head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
@@ -172,12 +188,15 @@ class EnhancedParser(Model):
         # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
         child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
+
         # shape (batch_size, sequence_length, sequence_length)
         arc_scores = self.arc_attention(head_arc_representation,
                                         child_arc_representation)
+        
         # shape (batch_size, num_tags, sequence_length, sequence_length)
         arc_tag_logits = self.tag_bilinear(head_tag_representation,
                                            child_tag_representation)
+
         # Switch to (batch_size, sequence_length, sequence_length, num_tags)
         arc_tag_logits = arc_tag_logits.permute(0, 2, 3, 1).contiguous()
 
@@ -323,7 +342,7 @@ class EnhancedParser(Model):
             A tensor of shape (batch_size, sequence_length, sequence_length) representing the
             probability of an arc being present for this edge.
         arc_tag_probs : ``torch.Tensor``
-            A tensor of shape (batch_size, sequence_length, sequence_length, sequence_length)
+            A tensor of shape (batch_size, sequence_length, sequence_length, num_tags)
             representing the distribution over edge tags for a given edge.
         """
         # Mask the diagonal, because we don't self edges.
@@ -337,7 +356,6 @@ class EnhancedParser(Model):
         arc_tag_logits.masked_fill_(minus_mask.unsqueeze(-1), -numpy.inf)
         # shape (batch_size, sequence_length, sequence_length)
         arc_probs = arc_scores.sigmoid()
-        #print(arc_probs)
         # shape (batch_size, sequence_length, sequence_length, num_tags)
         arc_tag_probs = torch.nn.functional.softmax(arc_tag_logits, dim=-1)
         return arc_probs, arc_tag_probs
