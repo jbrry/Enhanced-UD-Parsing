@@ -7,7 +7,7 @@
   //"validation_data_path": "data/UD_English-EWT/test_sample.conllu",
   "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
     "model": {
-      "type": "enhanced_parser",
+      "type": "biaffine_parser_enhanced",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {

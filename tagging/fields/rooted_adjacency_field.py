@@ -116,7 +116,6 @@ class RootedAdjacencyField(Field[torch.Tensor]):
 
         for index, label in zip(self.indices, labels):
             tensor[index] = label
-        print(tensor.shape)
         return tensor
 
     @overrides

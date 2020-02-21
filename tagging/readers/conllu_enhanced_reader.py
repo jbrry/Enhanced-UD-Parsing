@@ -66,7 +66,8 @@ def _convert_deps_to_nested_sequences(deps):
                 copy_node = list(head)
                 # join the values in the tuple
                 copy_node = str(head[0]) + '.' + str(head[-1])
-                copy_node = float(copy_node)
+                #copy_node = float(copy_node)
+                copy_node = int(copy_node)
                 current_heads.append(copy_node)
             else:
                 # regular head index
@@ -129,8 +130,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                                 if "CopyOf" in val:
                                     num_copy_nodes += 1
                 
+                ids = [x["id"] for x in annotation]
                 # regular case: only uses regular indices.                   
-                annotation = [x for x in annotation if isinstance(x["id"], int)]
+                #annotation = [x for x in annotation if isinstance(x["id"], int)]
                 
                 tokens = [x["form"] for x in annotation]
                 
@@ -153,7 +155,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     print("=" * 15)
                     print("\n")
 
-                yield self.text_to_instance(tokens, pos_tags, list(zip(tags, heads)), deps)
+                yield self.text_to_instance(tokens, pos_tags, list(zip(tags, heads)), deps, ids)
                 
         logger.info("Found %s copy nodes ", num_copy_nodes)
 
@@ -164,6 +166,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         pos_tags: List[str],
         dependencies: List[Tuple[str, int]] = None,
         deps: List[List[Tuple[str, int]]] = None,
+        ids: List[str] = None
     ) -> Instance:
 
         """
@@ -189,19 +192,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         
         token_field  = TextField([Token(t) for t in tokens], self._token_indexers)
         fields["tokens"] = token_field        
-        fields["metadata"] = MetadataField({"tokens": tokens, "pos": pos_tags})
+        fields["metadata"] = MetadataField({"tokens": tokens, "pos_tags": pos_tags, "ids": ids})
         fields["pos_tags"] = SequenceLabelField(pos_tags, token_field, label_namespace="pos_tags")
         
         # basic dependency labels
-#        if dependencies is not None:
-#            # We don't want to expand the label namespace with an additional dummy token, so we'll
-#            # always give the 'ROOT_HEAD' token a label of 'root'.
-#            fields["head_tags"] = SequenceLabelField(
-#                [x[0] for x in dependencies], token_field, label_namespace="head_tags"
-#            )
-#            fields["head_indices"] = SequenceLabelField(
-#                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
-#            )
+        if dependencies is not None:
+            # We don't want to expand the label namespace with an additional dummy token, so we'll
+            # always give the 'ROOT_HEAD' token a label of 'root'.
+            fields["head_tags"] = SequenceLabelField(
+                [x[0] for x in dependencies], token_field, label_namespace="head_tags"
+            )
+            fields["head_indices"] = SequenceLabelField(
+                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
+            )
 
 
         #### try regular deps
@@ -230,63 +233,40 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         #### try regular model with multiple edges (enhanced) (no ROOT)
         if deps is not None:
             enhanced_arc_tags, enhanced_arc_indices = _convert_deps_to_nested_sequences(deps)
-
+     
             assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
             
             # labels need to be 0-indexed for AdjacencyMatrix row-column indexing.
             # which leads to the question, how do we index a ROOT (0) node here?
             # should we just assume that (0, 0) is always ROOT?
-            zero_indexed_arc_tags = []
-            zero_indexed_arc_indices = []
+            arc_indices = []
+            arc_tags = []
             
             # model multiple head-dependent relations:
             # for each token, create an edge from the token's head(s) to it, e.g. (h, m)
             # there can be multiple (h, m) tuples for the same modifier.
             # CoNLLU indices start from 1
-            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.
-            
-            for modifier, heads in enumerate(enhanced_arc_indices):
-                for head in heads:
-                    head_token_index = int(head) - 1
-                    # ROOT (skip for now)
-                    if head_token_index == -1:
-                        head_token_index = 0
-                    print(head_token_index, "==>", modifier)
-                    zero_indexed_arc_indices.append((head_token_index, modifier))
+            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.      
+            for modifier, head_list in enumerate(enhanced_arc_indices, start=1):
+                for head in head_list:
+                    #print(head, "==>", modifier)
+                    arc_indices.append((head, modifier))
 
-            for relations in enhanced_arc_tags:
-                for relation in relations:
-                    zero_indexed_arc_tags.append(relation)
+            for relation_list in enhanced_arc_tags:
+                for relation in relation_list:
+                    arc_tags.append(relation)
 
-            assert len(zero_indexed_arc_indices) == len(zero_indexed_arc_tags), "each arc should have a label"            
+            assert len(arc_indices) == len(arc_tags), "each arc should have a label"
 
-            #root_tokens = ["root"] + tokens
+            if arc_indices is not None and arc_tags is not None:
+#                print(tokens)
+#                print(arc_indices)
+#                print(arc_tags)
+#                print("len tokens ", len(tokens))
+#                print("len arc indices ", len(arc_indices))
+#                print("len arc tags ", len(arc_tags))
+                
+                token_field_with_root = ['root'] + tokens
+                fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
 
-            if zero_indexed_arc_indices is not None and zero_indexed_arc_tags is not None:
-                print(tokens)
-                print(zero_indexed_arc_indices)
-                print(zero_indexed_arc_tags)
-                print("len tokens ", len(tokens))
-                print("len arc indices ", len(zero_indexed_arc_indices))
-                print("len arc tags ", len(zero_indexed_arc_tags))
-                fields["arc_tags"] = RootedAdjacencyField(zero_indexed_arc_indices, tokens, zero_indexed_arc_tags)
-
-
-        # If doing multi-label predictions
-            # head_tags : ListField[ListField[LabelField]]
-#            sublist_fields = []
-#            for label_list in rels:
-#                label_fields = ListField([LabelField(label, label_namespace="enhanced_head_tags")
-#                                      for label in label_list])   
-#                sublist_fields.append(label_fields)
-            #fields["enhanced_head_tags"] = ListField(sublist_fields)
-            
-            # head_indices : ListField[ListField[LabelField]]
-#            sublist_fields = []
-#            for label_list in processed_heads:
-#                label_fields = ListField([LabelField(label, label_namespace="enhanced_head_index_tags", skip_indexing=True)
-#                                      for label in label_list])   
-#                sublist_fields.append(label_fields)
-            #fields["enhanced_head_indices"] = ListField(sublist_fields)
-            
         return Instance(fields)

@@ -5,7 +5,7 @@ local embedding_dim = word_embedding_dim + pos_embedding_dim + char_embedding_di
 local hidden_dim = 200;
 local num_epochs = 10;
 local patience = 10;
-local batch_size = 32;
+local batch_size = 16;
 local learning_rate = 0.001;
 
 {
@@ -22,20 +22,17 @@ local learning_rate = 0.001;
       }
     },
   train_data_path: 'data/UD_English-EWT/en_ewt-ud-train.conllu',
-  validation_data_path: 'data/UD_English-EWT/en_ewt-ud-dev.conllu',
-  test_data_path: 'data/UD_English-EWT/en_ewt-ud-test.conllu',     
+  //validation_data_path: 'data/UD_English-EWT/en_ewt-ud-dev.conllu',
+  //test_data_path: 'data/UD_English-EWT/en_ewt-ud-test.conllu',     
   "model": {
       "type": "biaffine_parser_enhanced",
       "text_field_embedder": {
         "token_embedders": {
-          "tokens": {
+        "tokens": {
             "type": "embedding",
-            "embedding_dim": word_embedding_dim,
-//            "pretrained_file": "https://allennlp.s3.amazonaws.com/datasets/glove/glove.6B.100d.txt.gz",
-//            "trainable": true,
-            "sparse": true
-           },
-           "token_characters": {
+            "embedding_dim": word_embedding_dim
+        },           
+        "token_characters": {
              "type": "character_encoding",
              "embedding": {
                "embedding_dim": char_embedding_dim,
@@ -88,9 +85,8 @@ local learning_rate = 0.001;
       "num_epochs": num_epochs,
       "grad_norm": 5.0,
       "patience": 10,
-      "cuda_device": 0,
+      "cuda_device": -1,
       "validation_metric": "+LAS",
-      "num_serialized_models_to_keep": 3,
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]
