@@ -26,7 +26,7 @@ local learning_rate = 0.001;
     "test_data_path": std.extVar("TEST_DATA_PATH"),
     "model": {
       //"type": "biaffine_parser",
-      "type": "biaffine_parser_original",
+      "type": "biaffine_parser_enhanced",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {

@@ -19,6 +19,7 @@ from allennlp.nn.util import get_text_field_mask, get_range_vector
 from allennlp.nn.util import get_device_of, masked_log_softmax, get_lengths_from_binary_sequence_mask
 from allennlp.nn.chu_liu_edmonds import decode_mst
 from allennlp.training.metrics import AttachmentScores
+from allennlp.training.metrics import F1Measure
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -30,6 +31,7 @@ class BiaffineDependencyParserEnhanced(Model):
     This dependency parser follows the model of
     ` Deep Biaffine Attention for Neural Dependency Parsing (Dozat and Manning, 2016)
     <https://arxiv.org/abs/1611.01734>`_ .
+
     Word representations are generated using a bidirectional LSTM,
     followed by separate biaffine classifiers for pairs of words,
     predicting whether a directed arc exists between the two words
@@ -38,11 +40,7 @@ class BiaffineDependencyParserEnhanced(Model):
     decoded using Edmond's algorithm by viewing the dependency tree as
     a MST on a fully connected graph, where nodes are words and edges
     are scored dependency arcs.
-    
-    The parser has been modified to include a treebank embedding as in
-    ` https://www.aclweb.org/anthology/P18-2098`.
-    The default behaviour does not use one but it is included as 
-    `biaffine_parser_tbemb` wraps this model.
+
     Parameters
     ----------
     vocab : ``Vocabulary``, required
@@ -64,15 +62,9 @@ class BiaffineDependencyParserEnhanced(Model):
         By default, a 1 layer feedforward network with an elu activation is used.
     pos_tag_embedding : ``Embedding``, optional.
         Used to embed the ``pos_tags`` ``SequenceLabelField`` we get as input to the model.
-    treebank_embedding : ``Embedding``, optional.
-        Used to embed the ``treebank_ids`` ``SequenceLabelField`` we get as input to the model.
-        Added here as this model is wrapped by BiaffineDependencyParserMonolingualTbemb.
     use_mst_decoding_for_validation : ``bool``, optional (default = True).
         Whether to use Edmond's algorithm to find the optimal minimum spanning tree during validation.
         If false, decoding is greedy.
-    use_treebank_embedding : ``bool``, optional (default = False).
-        Whether to use a treebank embedding. Default is False as this is a monolingual model but is included
-        so that BiaffineDependencyParserMonolingualTbemb can use it.
     dropout : ``float``, optional, (default = 0.0)
         The variational dropout applied to the output of the encoder and MLP layers.
     input_dropout : ``float``, optional, (default = 0.0)
@@ -91,14 +83,12 @@ class BiaffineDependencyParserEnhanced(Model):
                  tag_feedforward: FeedForward = None,
                  arc_feedforward: FeedForward = None,
                  pos_tag_embedding: Embedding = None,
-                 treebank_embedding: Embedding = None,
-                 use_mst_decoding_for_validation: bool = True,
-                 use_treebank_embedding: bool = False,
+                 use_mst_decoding_for_validation: bool = False,
                  dropout: float = 0.0,
                  input_dropout: float = 0.0,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
-        super().__init__(vocab, regularizer)
+        super(BiaffineDependencyParserEnhanced, self).__init__(vocab, regularizer)
 
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
@@ -128,16 +118,15 @@ class BiaffineDependencyParserEnhanced(Model):
                                                       num_labels)
 
         self._pos_tag_embedding = pos_tag_embedding or None
-        self._treebank_embedding = treebank_embedding or None
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
+        
+        # _head_sentinel (1, 1, 400) of random numbers to represent the Root token in the encoder.
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
 
         representation_dim = text_field_embedder.get_output_dim()
         if pos_tag_embedding is not None:
             representation_dim += pos_tag_embedding.get_output_dim()
-        if treebank_embedding is not None:
-            representation_dim += treebank_embedding.get_output_dim()
 
         check_dimensions_match(representation_dim, encoder.get_input_dim(),
                                "text field embedding dim", "encoder input dim")
@@ -148,22 +137,18 @@ class BiaffineDependencyParserEnhanced(Model):
                                "arc representation dim", "arc feedforward output dim")
 
         self.use_mst_decoding_for_validation = use_mst_decoding_for_validation
-        self.use_treebank_embedding = use_treebank_embedding
 
         tags = self.vocab.get_token_to_index_vocabulary("pos")
         punctuation_tag_indices = {tag: index for tag, index in tags.items() if tag in POS_TO_IGNORE}
         self._pos_to_ignore = set(punctuation_tag_indices.values())
         logger.info(f"Found POS tags corresponding to the following punctuation : {punctuation_tag_indices}. "
                     "Ignoring words with these POS tags for evaluation.")
-        
-        if self.use_treebank_embedding:
-            tbids = self.vocab.get_token_to_index_vocabulary("tbids")
-            tbid_indices = {tb: index for tb, index in tbids.items()}
-            self._tbids = set(tbid_indices.values())
-            logger.info(f"Found TBIDs corresponding to the following treebanks : {tbid_indices}. "
-                        "Embedding these as additional features.")
 
         self._attachment_scores = AttachmentScores()
+        # enhanced metrics
+        self._unlabelled_f1 = F1Measure(positive_label=1)
+        self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction='none')
+        self._tag_loss = torch.nn.CrossEntropyLoss(reduction='none')
         initializer(self)
 
     @overrides
@@ -171,7 +156,6 @@ class BiaffineDependencyParserEnhanced(Model):
                 words: Dict[str, torch.LongTensor],
                 pos_tags: torch.LongTensor,
                 metadata: List[Dict[str, Any]],
-                treebank_ids: torch.LongTensor = None,
                 head_tags: torch.LongTensor = None,
                 head_indices: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
@@ -198,14 +182,13 @@ class BiaffineDependencyParserEnhanced(Model):
                     The tokens in the original sentence.
                 pos : ``List[str]``, required.
                     The dependencies POS tags for each word.
-        treebank_ids : ``torch.LongTensor``, optional (default=None)
-            The output of a ``SequenceLabelField`` containing treebank IDs.
         head_tags : torch.LongTensor, optional (default = None)
             A torch tensor representing the sequence of integer gold class labels for the arcs
             in the dependency parse. Has shape ``(batch_size, sequence_length)``.
         head_indices : torch.LongTensor, optional (default = None)
             A torch tensor representing the sequence of integer indices denoting the parent of every
             word in the dependency parse. Has shape ``(batch_size, sequence_length)``.
+
         Returns
         -------
         An output dictionary consisting of:
@@ -225,32 +208,64 @@ class BiaffineDependencyParserEnhanced(Model):
         mask : ``torch.LongTensor``
             A mask denoting the padded elements in the batch.
         """
-        embedded_text_input = self.text_field_embedder(words)
         
-        if treebank_ids is not None and self._treebank_embedding is not None:
-            embedded_treebank_ids = self._treebank_embedding(treebank_ids)
-            
+        embedded_text_input = self.text_field_embedder(words)
         if pos_tags is not None and self._pos_tag_embedding is not None:
             embedded_pos_tags = self._pos_tag_embedding(pos_tags)
-            if self.use_treebank_embedding:
-                embedded_text_input = torch.cat([embedded_text_input, embedded_pos_tags, embedded_treebank_ids], -1)
-            else:
-                embedded_text_input = torch.cat([embedded_text_input, embedded_pos_tags], -1)
+            embedded_text_input = torch.cat([embedded_text_input, embedded_pos_tags], -1)
         elif self._pos_tag_embedding is not None:
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
 
         mask = get_text_field_mask(words)
+        
+        embedded_text_input = self._input_dropout(embedded_text_input)
+        
+        encoded_text = self.encoder(embedded_text_input, mask)
+        encoded_text = self._dropout(encoded_text)
+        
+        batch_size, _, encoding_dim = encoded_text.size()
+        
+        # Expand head_sentinel so it can be used for each element in the batch.
+        head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
+        
+        # Concatenate the head sentinel onto the sentence representation.
+        encoded_text = torch.cat([head_sentinel, encoded_text], 1)
 
-        predicted_heads, predicted_head_tags, mask, arc_nll, tag_nll = self._parse(
-                embedded_text_input, mask, head_tags, head_indices)
+        # Extend the mask to accomodate for head_sentinel.
+        mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
+        
+        float_mask = mask.float()
+        
+        # shape (batch_size, sequence_length + 1, arc_representation_dim)
+        head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
+        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
 
+        # shape (batch_size, sequence_length + 1, tag_representation_dim)
+        head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
+        child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
+        
+        # shape (batch_size, sequence_length + 1, sequence_length + 1)
+        attended_arcs = self.arc_attention(head_arc_representation,
+                                           child_arc_representation)
+        
+        minus_inf = -1e8
+        minus_mask = (1 - float_mask) * minus_inf
+        attended_arcs = attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+        
+        
+        # Basic tree parse.
+        predicted_heads, predicted_head_tags, arc_nll, tag_nll = self._parse(
+                embedded_text_input, mask, head_tag_representation, child_tag_representation, attended_arcs, head_tags, head_indices)        
+        
         loss = arc_nll + tag_nll
 
         if head_indices is not None and head_tags is not None:
             evaluation_mask = self._get_mask_for_eval(mask[:, 1:], pos_tags)
+            print("evaluation mask size", evaluation_mask.shape)
             # We calculate attatchment scores for the whole sentence
             # but excluding the symbolic ROOT token at the start,
             # which is why we start from the second element in the sequence.
+            # pred arguments skip the root but gold is as normal
             self._attachment_scores(predicted_heads[:, 1:],
                                     predicted_head_tags[:, 1:],
                                     head_indices,
@@ -294,40 +309,20 @@ class BiaffineDependencyParserEnhanced(Model):
     def _parse(self,
                embedded_text_input: torch.Tensor,
                mask: torch.LongTensor,
+               head_tag_representation: torch.Tensor,
+               child_tag_representation: torch.Tensor,
+               attended_arcs: torch.Tensor,
                head_tags: torch.LongTensor = None,
                head_indices: torch.LongTensor = None
               ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
-        embedded_text_input = self._input_dropout(embedded_text_input)
-        encoded_text = self.encoder(embedded_text_input, mask)
-
-        batch_size, _, encoding_dim = encoded_text.size()
-
-        head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
-        # Concatenate the head sentinel onto the sentence representation.
-        encoded_text = torch.cat([head_sentinel, encoded_text], 1)
-        mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
+               
+        batch_size, _, encoding_dim = embedded_text_input.size()
+        
+        # Expand head_indices and head_tags to accomodate dummy ROOT token.
         if head_indices is not None:
             head_indices = torch.cat([head_indices.new_zeros(batch_size, 1), head_indices], 1)
         if head_tags is not None:
             head_tags = torch.cat([head_tags.new_zeros(batch_size, 1), head_tags], 1)
-        float_mask = mask.float()
-        encoded_text = self._dropout(encoded_text)
-
-        # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
-        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
-
-        # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
-        child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
-        # shape (batch_size, sequence_length, sequence_length)
-        attended_arcs = self.arc_attention(head_arc_representation,
-                                           child_arc_representation)
-
-        minus_inf = -1e8
-        minus_mask = (1 - float_mask) * minus_inf
-        attended_arcs = attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
 
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_decode(head_tag_representation,
@@ -355,7 +350,7 @@ class BiaffineDependencyParserEnhanced(Model):
                                                     head_tags=predicted_head_tags.long(),
                                                     mask=mask)
 
-        return predicted_heads, predicted_head_tags, mask, arc_nll, tag_nll
+        return predicted_heads, predicted_head_tags, arc_nll, tag_nll
 
     def _construct_loss(self,
                         head_tag_representation: torch.Tensor,
@@ -366,6 +361,7 @@ class BiaffineDependencyParserEnhanced(Model):
                         mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the arc and tag loss for a sequence given gold head indices and tags.
+
         Parameters
         ----------
         head_tag_representation : ``torch.Tensor``, required.
@@ -388,6 +384,7 @@ class BiaffineDependencyParserEnhanced(Model):
         mask : ``torch.Tensor``, required.
             A mask of shape (batch_size, sequence_length), denoting unpadded
             elements in the sequence.
+
         Returns
         -------
         arc_nll : ``torch.Tensor``, required.
@@ -437,6 +434,7 @@ class BiaffineDependencyParserEnhanced(Model):
         these greedily chosen arcs independently. Note that this method of decoding
         is not guaranteed to produce trees (i.e. there maybe be multiple roots,
         or cycles when children are attached to their parents).
+
         Parameters
         ----------
         head_tag_representation : ``torch.Tensor``, required.
@@ -450,6 +448,7 @@ class BiaffineDependencyParserEnhanced(Model):
         attended_arcs : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
+
         Returns
         -------
         heads : ``torch.Tensor``
@@ -463,7 +462,7 @@ class BiaffineDependencyParserEnhanced(Model):
         attended_arcs = attended_arcs + torch.diag(attended_arcs.new(mask.size(1)).fill_(-numpy.inf))
         # Mask padded tokens, because we only want to consider actual words as heads.
         if mask is not None:
-            minus_mask = (1 - mask).byte().unsqueeze(2)
+            minus_mask = (1 - mask).to(dtype=torch.bool).unsqueeze(2)
             attended_arcs.masked_fill_(minus_mask, -numpy.inf)
 
         # Compute the heads greedily.
@@ -490,6 +489,7 @@ class BiaffineDependencyParserEnhanced(Model):
         there is an edge in each direction, where the weight of the edge corresponds
         to the most likely dependency label probability for that arc. The MST is
         then generated from this directed graph.
+
         Parameters
         ----------
         head_tag_representation : ``torch.Tensor``, required.
@@ -503,6 +503,7 @@ class BiaffineDependencyParserEnhanced(Model):
         attended_arcs : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
+
         Returns
         -------
         heads : ``torch.Tensor``
@@ -581,6 +582,7 @@ class BiaffineDependencyParserEnhanced(Model):
         and a tensor of head indices to compute tags for. Note that these are
         either gold or predicted heads, depending on whether this function is
         being called to compute the loss, or if it's being called during inference.
+
         Parameters
         ----------
         head_tag_representation : ``torch.Tensor``, required.
@@ -594,6 +596,7 @@ class BiaffineDependencyParserEnhanced(Model):
         head_indices : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length). The indices of the heads
             for every word.
+
         Returns
         -------
         head_tag_logits : ``torch.Tensor``
@@ -626,12 +629,14 @@ class BiaffineDependencyParserEnhanced(Model):
         Dependency evaluation excludes words are punctuation.
         Here, we create a new mask to exclude word indices which
         have a "punctuation-like" part of speech tag.
+
         Parameters
         ----------
         mask : ``torch.LongTensor``, required.
             The original mask.
         pos_tags : ``torch.LongTensor``, required.
             The pos tags for the sequence.
+
         Returns
         -------
         A new mask, where any indices equal to labels
