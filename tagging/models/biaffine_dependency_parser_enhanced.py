@@ -105,6 +105,7 @@ class BiaffineDependencyParserEnhanced(Model):
                                                      arc_representation_dim,
                                                      use_input_biases=True)
 
+        # use just the one set of labels or keep them separate?
         num_labels = self.vocab.get_vocab_size("head_tags")
         num_enhanced_labels = self.vocab.get_vocab_size("labels")
 
@@ -117,8 +118,8 @@ class BiaffineDependencyParserEnhanced(Model):
 
         # this is used in the graph parser, so using it here again for simplicity
         self.e_tag_bilinear = BilinearMatrixAttention(tag_representation_dim,
-                                                    tag_representation_dim,
-                                                    label_dim=num_enhanced_labels)
+                                                      tag_representation_dim,
+                                                      label_dim=num_enhanced_labels)
         
         self.tag_bilinear = torch.nn.modules.Bilinear(tag_representation_dim,
                                                       tag_representation_dim,
@@ -261,6 +262,8 @@ class BiaffineDependencyParserEnhanced(Model):
         # shape (batch_size, num_tags, sequence_length, sequence_length)
         arc_tag_logits = self.e_tag_bilinear(head_tag_representation,
                                            child_tag_representation)
+        
+        #print("arc_tag_logits", arc_tag_logits.size())
 
         # Switch to (batch_size, sequence_length, sequence_length, num_tags)
         arc_tag_logits = arc_tag_logits.permute(0, 2, 3, 1).contiguous()
@@ -274,10 +277,6 @@ class BiaffineDependencyParserEnhanced(Model):
                 embedded_text_input, mask, head_tag_representation, child_tag_representation, attended_arcs, head_tags, head_indices)
         
         # Enhanced graph parse
-#        enhanced_arc_probs, enhanced_arc_tag_probs = self._greedy_graph_decode(head_tag_representation,
-#                                                                       child_tag_representation,
-#                                                                       attended_arcs,
-#                                                                       mask)
         enhanced_arc_probs, enhanced_arc_tag_probs = self._greedy_graph_decode(attended_arcs,
                                                        arc_tag_logits,
                                                        mask)
@@ -290,10 +289,12 @@ class BiaffineDependencyParserEnhanced(Model):
             enhanced_arc_nll, enhanced_tag_nll = self._construct_enhanced_loss(attended_arcs=attended_arcs,
                                                     arc_tag_logits=arc_tag_logits,
                                                     enhanced_tags=enhanced_tags,
-                                                    mask=mask)        
+                                                    mask=mask)   
         
         loss = arc_nll + tag_nll + enhanced_arc_nll + enhanced_tag_nll
-
+        #loss = arc_nll + tag_nll
+        #loss = enhanced_arc_nll + enhanced_tag_nll
+        
         if head_indices is not None and head_tags is not None:
             evaluation_mask = self._get_mask_for_eval(mask[:, 1:], pos_tags)
             # We calculate attatchment scores for the whole sentence
@@ -375,16 +376,16 @@ class BiaffineDependencyParserEnhanced(Model):
 
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_tree_decode(head_tag_representation,
-                                                                       child_tag_representation,
-                                                                       attended_arcs,
-                                                                       mask)
+                                                                            child_tag_representation,
+                                                                            attended_arcs,
+                                                                            mask)
         else:
             predicted_heads, predicted_head_tags = self._mst_decode(head_tag_representation,
                                                                     child_tag_representation,
                                                                     attended_arcs,
                                                                     mask)
+            
         if head_indices is not None and head_tags is not None:
-
             arc_nll, tag_nll = self._construct_loss(head_tag_representation=head_tag_representation,
                                                     child_tag_representation=child_tag_representation,
                                                     attended_arcs=attended_arcs,
@@ -446,6 +447,7 @@ class BiaffineDependencyParserEnhanced(Model):
         # shape (batch_size, 1)
         range_vector = get_range_vector(batch_size, get_device_of(attended_arcs)).unsqueeze(1)
         # shape (batch_size, sequence_length, sequence_length)
+        # TODO: masked sigmoid?
         normalised_arc_logits = masked_log_softmax(attended_arcs,
                                                    mask) * float_mask.unsqueeze(2) * float_mask.unsqueeze(1)
 
@@ -483,13 +485,13 @@ class BiaffineDependencyParserEnhanced(Model):
 
         Parameters
         ----------
-        arc_scores : ``torch.Tensor``, required.
+        attended_arcs : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate a
             binary classification decision for whether an edge is present between two words.
         arc_tag_logits : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length, num_tags) used to generate
             a distribution over edge tags for a given edge.
-        arc_tags : ``torch.Tensor``, required.
+        enhanced_tags : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length).
             The labels for every arc.
         mask : ``torch.Tensor``, required.
@@ -505,10 +507,14 @@ class BiaffineDependencyParserEnhanced(Model):
         """
 
         float_mask = mask.float()
+        
+        # tensor denoting where an edge exists in the adjacency matrix (indicated by a 1)
         arc_indices = (enhanced_tags != -1).float()
         # Make the arc tags not have negative values anywhere
-        # (by default, no edge is indicated with -1).
+        # (by default, no edge is indicated with -1) -1 will be multiplied by 0 resulting in -0, other values will be multiplied by 1.
         arc_tags = enhanced_tags * arc_indices
+        
+        # arc loss w.r.t. attended arcs and arc_indices which denotes presence of edges
         arc_nll = self._arc_loss(attended_arcs, arc_indices) * float_mask.unsqueeze(1) * float_mask.unsqueeze(2)
         # We want the mask for the tags to only include the unmasked words
         # and we only care about the loss with respect to the gold arcs.
@@ -524,7 +530,7 @@ class BiaffineDependencyParserEnhanced(Model):
 
         arc_nll = arc_nll.sum() / valid_positions.float()
         tag_nll = tag_nll.sum() / valid_positions.float()
-        return arc_nll, tag_nll   
+        return arc_nll, tag_nll
     
 
     def _greedy_tree_decode(self,
@@ -573,23 +579,22 @@ class BiaffineDependencyParserEnhanced(Model):
 
         # Compute the heads greedily.
         # shape (batch_size, sequence_length)
+        # heads is the index location of the arc with the highest score, _ is the raw value.
         _, heads = attended_arcs.max(dim=2)
-        #print("heads size", heads.size())
-        #print("heads", heads)
-
 
         # Given the greedily predicted heads, decode their dependency tags.
         # shape (batch_size, sequence_length, num_head_tags)
         head_tag_logits = self._get_head_tags(head_tag_representation,
                                               child_tag_representation,
                                               heads)
-        _, head_tags = head_tag_logits.max(dim=2)
+        _, head_tags = head_tag_logits.max(dim=2)        
+
         return heads, head_tags
 
     @staticmethod
     def _greedy_graph_decode(attended_arcs: torch.Tensor,
-                       arc_tag_logits: torch.Tensor,
-                       mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                             arc_tag_logits: torch.Tensor,
+                             mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Decodes the head and head tag predictions by decoding the unlabeled arcs
         independently for each word and then again, predicting the head tags of
@@ -597,7 +602,7 @@ class BiaffineDependencyParserEnhanced(Model):
 
         Parameters
         ----------
-        arc_scores : ``torch.Tensor``, required.
+        attended_arcs : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
         arc_tag_logits : ``torch.Tensor``, required.
@@ -774,6 +779,7 @@ class BiaffineDependencyParserEnhanced(Model):
         # shape (batch_size, sequence_length, num_head_tags)
         head_tag_logits = self.tag_bilinear(selected_head_tag_representations,
                                             child_tag_representation)
+        
         return head_tag_logits
 
     def _get_mask_for_eval(self,
@@ -805,7 +811,7 @@ class BiaffineDependencyParserEnhanced(Model):
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         metrics = {}
-#        UAS, LAS = self._attachment_scores.get_metric(reset)
+        #return self._attachment_scores.get_metric(reset)
 #        metrics["UAS"] = UAS
 #        metrics["LAS"] = LAS
         precision, recall, f1_measure = self._unlabelled_f1.get_metric(reset)
