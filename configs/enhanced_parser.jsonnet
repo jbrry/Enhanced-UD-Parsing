@@ -1,5 +1,6 @@
 {
     "dataset_reader":{
+        //"type":"universal_dependencies"
         "type":"universal_dependencies_enhanced"
     },
   "train_data_path": "data/UD_English-EWT/en_ewt-ud-train_no_ellipsis.conllu",
@@ -8,6 +9,7 @@
   "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
     "model": {
       "type": "biaffine_parser_enhanced",
+      //"type": "biaffine_parser_original",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {
@@ -17,21 +19,21 @@
         }
       },
       "pos_tag_embedding":{
-        "embedding_dim": 50,
+        "embedding_dim": 100,
         "vocab_namespace": "pos_tags"
       },
       "encoder": {
         "type": "stacked_bidirectional_lstm",
-        "input_size": 150,
-        "hidden_size": 200,
+        "input_size": 200,
+        "hidden_size": 600,
         "num_layers": 3,
         "recurrent_dropout_probability": 0.3,
         "use_highway": true
       },
       "arc_representation_dim": 500,
       "tag_representation_dim": 100,
-      "dropout": 0.3,
-      "input_dropout": 0.3,
+      "dropout": 0.33,
+      "input_dropout": 0.33,
       "initializer": [
         [".*feedforward.*weight", {"type": "xavier_uniform"}],
         [".*feedforward.*bias", {"type": "zero"}],
@@ -49,11 +51,11 @@
       "batch_size" : 32
     },
     "trainer": {
-      "num_epochs": 10,
+      "num_epochs": 50,
       "grad_norm": 5.0,
       "patience": 50,
       "cuda_device": 0,
-      "validation_metric": "+f1",
+      "validation_metric": "+LAS",
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]

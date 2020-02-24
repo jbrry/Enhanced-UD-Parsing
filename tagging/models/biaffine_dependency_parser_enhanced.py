@@ -247,21 +247,23 @@ class BiaffineDependencyParserEnhanced(Model):
         
         float_mask = mask.float()
         
+        # TODO try separate arc/ enhanced_arc representations!! e.g. attended_arcs and enhanced_attended_arcs
+        
         # shape (batch_size, sequence_length + 1, arc_representation_dim)
-        head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
-        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
+        enhanced_head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
+        enhanced_child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
 
         # shape (batch_size, sequence_length + 1, tag_representation_dim)
-        head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
-        child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
+        enhanced_head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
+        enhanced_child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
         
         # shape (batch_size, sequence_length + 1, sequence_length + 1)
-        attended_arcs = self.arc_attention(head_arc_representation,
-                                           child_arc_representation)
+        enhanced_attended_arcs = self.arc_attention(enhanced_head_arc_representation,
+                                           enhanced_child_arc_representation)
         
         # shape (batch_size, num_tags, sequence_length, sequence_length)
-        arc_tag_logits = self.e_tag_bilinear(head_tag_representation,
-                                           child_tag_representation)
+        arc_tag_logits = self.e_tag_bilinear(enhanced_head_tag_representation,
+                                           enhanced_child_tag_representation)
         
         #print("arc_tag_logits", arc_tag_logits.size())
 
@@ -270,14 +272,14 @@ class BiaffineDependencyParserEnhanced(Model):
         
         minus_inf = -1e8
         minus_mask = (1 - float_mask) * minus_inf
-        attended_arcs = attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
+        enhanced_attended_arcs = enhanced_attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
         
         # Basic tree parse.
         predicted_heads, predicted_head_tags, arc_nll, tag_nll = self._parse(
-                embedded_text_input, mask, head_tag_representation, child_tag_representation, attended_arcs, head_tags, head_indices)
+                encoded_text, mask, head_tags, head_indices)
         
         # Enhanced graph parse
-        enhanced_arc_probs, enhanced_arc_tag_probs = self._greedy_graph_decode(attended_arcs,
+        enhanced_arc_probs, enhanced_arc_tag_probs = self._greedy_graph_decode(enhanced_attended_arcs,
                                                        arc_tag_logits,
                                                        mask)
         
@@ -285,14 +287,18 @@ class BiaffineDependencyParserEnhanced(Model):
 #            print("attended_arcs size", attended_arcs.size())
 #            print("arc_tag_logits size", arc_tag_logits.size())
 #            print("enhanced_tags size", enhanced_tags.size())
-            
-            enhanced_arc_nll, enhanced_tag_nll = self._construct_enhanced_loss(attended_arcs=attended_arcs,
-                                                    arc_tag_logits=arc_tag_logits,
-                                                    enhanced_tags=enhanced_tags,
-                                                    mask=mask)   
+            enhanced_arc_nll, enhanced_tag_nll = self._construct_enhanced_loss(attended_arcs=enhanced_attended_arcs,
+                                                                               arc_tag_logits=arc_tag_logits,
+                                                                               enhanced_tags=enhanced_tags,
+                                                                               mask=mask)
+                                                                               
+    
+        #gamma = 0.6
+        #enhanced_arc_nll = enhanced_arc_nll * gamma
+        #enhanced_tag_nll = enhanced_tag_nll * (1 - gamma)
         
-        loss = arc_nll + tag_nll + enhanced_arc_nll + enhanced_tag_nll
-        #loss = arc_nll + tag_nll
+        loss = arc_nll + tag_nll + enhanced_arc_nll + enhanced_tag_nll  
+        #loss = arc_nll + tag_nll + enhanced_arc_nll
         #loss = enhanced_arc_nll + enhanced_tag_nll
         
         if head_indices is not None and head_tags is not None:
@@ -357,22 +363,39 @@ class BiaffineDependencyParserEnhanced(Model):
         return output_dict
 
     def _parse(self,
-               embedded_text_input: torch.Tensor,
+               encoded_text: torch.Tensor,
                mask: torch.LongTensor,
-               head_tag_representation: torch.Tensor,
-               child_tag_representation: torch.Tensor,
-               attended_arcs: torch.Tensor,
                head_tags: torch.LongTensor = None,
                head_indices: torch.LongTensor = None
               ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
                
-        batch_size, _, encoding_dim = embedded_text_input.size()
+        batch_size, _, encoding_dim = encoded_text.size()
         
         # Expand head_indices and head_tags to accomodate dummy ROOT token.
         if head_indices is not None:
             head_indices = torch.cat([head_indices.new_zeros(batch_size, 1), head_indices], 1)
         if head_tags is not None:
             head_tags = torch.cat([head_tags.new_zeros(batch_size, 1), head_tags], 1)
+            
+            
+        float_mask = mask.float()
+        # make separate head and dep representations
+        
+        # shape (batch_size, sequence_length + 1, arc_representation_dim)
+        head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
+        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
+
+        # shape (batch_size, sequence_length + 1, tag_representation_dim)
+        head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
+        child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
+        
+        # shape (batch_size, sequence_length + 1, sequence_length + 1)
+        attended_arcs = self.arc_attention(head_arc_representation,
+                                           child_arc_representation)
+
+        minus_inf = -1e8
+        minus_mask = (1 - float_mask) * minus_inf
+        attended_arcs = attended_arcs + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
 
         if self.training or not self.use_mst_decoding_for_validation:
             predicted_heads, predicted_head_tags = self._greedy_tree_decode(head_tag_representation,
@@ -810,13 +833,20 @@ class BiaffineDependencyParserEnhanced(Model):
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+        
+        metrics_to_track = ["UAS", "LAS"]
         metrics = {}
-        #return self._attachment_scores.get_metric(reset)
-#        metrics["UAS"] = UAS
-#        metrics["LAS"] = LAS
-        precision, recall, f1_measure = self._unlabelled_f1.get_metric(reset)
+        
+        # get tree scores
+        tree_results_dict = self._attachment_scores.get_metric(reset)
+        for metric, value in tree_results_dict.items():
+            if metric in metrics_to_track:
+                metrics[metric] = value
+            
+        # get graph scores 
+        precision, recall, f1_measure = self._unlabelled_f1.get_metric(reset)        
         metrics["precision"] = precision
         metrics["recall"] = recall
         metrics["f1"] = f1_measure
-
+        
         return metrics
