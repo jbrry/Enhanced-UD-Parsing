@@ -192,19 +192,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         
         token_field  = TextField([Token(t) for t in tokens], self._token_indexers)
         fields["tokens"] = token_field        
-        fields["metadata"] = MetadataField({"tokens": tokens, "pos_tags": pos_tags, "ids": ids})
+        
         fields["pos_tags"] = SequenceLabelField(pos_tags, token_field, label_namespace="pos_tags")
         
         # basic dependency labels
-        if dependencies is not None:
-            # We don't want to expand the label namespace with an additional dummy token, so we'll
-            # always give the 'ROOT_HEAD' token a label of 'root'.
-            fields["head_tags"] = SequenceLabelField(
-                [x[0] for x in dependencies], token_field, label_namespace="head_tags"
-            )
-            fields["head_indices"] = SequenceLabelField(
-                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
-            )
+#        if dependencies is not None:
+#            # We don't want to expand the label namespace with an additional dummy token, so we'll
+#            # always give the 'ROOT_HEAD' token a label of 'root'.
+#            fields["head_tags"] = SequenceLabelField(
+#                [x[0] for x in dependencies], token_field, label_namespace="head_tags"
+#            )
+#            fields["head_indices"] = SequenceLabelField(
+#                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
+#            )
 
 
         #### try regular deps
@@ -241,6 +241,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             # should we just assume that (0, 0) is always ROOT?
             arc_indices = []
             arc_tags = []
+            arc_indices_and_tags = []
             
             # model multiple head-dependent relations:
             # for each token, create an edge from the token's head(s) to it, e.g. (h, m)
@@ -257,6 +258,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     arc_tags.append(relation)
 
             assert len(arc_indices) == len(arc_tags), "each arc should have a label"
+            
+            for arc_index, arc_tag in zip(arc_indices, arc_tags):
+                arc_indices_and_tags.append((arc_index, arc_tag))
 
             if arc_indices is not None and arc_tags is not None:
 #                print(tokens)
@@ -268,5 +272,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 
                 token_field_with_root = ['root'] + tokens
                 fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
+                
+            fields["metadata"] = MetadataField({"tokens": tokens, "pos_tags": pos_tags, "ids": ids, "arc_indices": arc_indices, "arc_tags": arc_tags, "labeled_arcs": arc_indices_and_tags})
 
         return Instance(fields)

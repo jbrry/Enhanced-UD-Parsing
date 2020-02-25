@@ -17,6 +17,7 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator, Activation
 from allennlp.nn.util import get_text_field_mask
 from allennlp.nn.util import get_lengths_from_binary_sequence_mask
 from allennlp.training.metrics import F1Measure
+from tagging.training.enhanced_attachment_scores import EnhancedAttachmentScores
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -124,6 +125,8 @@ class EnhancedParser(Model):
                                "arc representation dim", "arc feedforward output dim")
 
         self._unlabelled_f1 = F1Measure(positive_label=1)
+        self._enhanced_attachment_scores = EnhancedAttachmentScores()
+        
         self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction='none')
         self._tag_loss = torch.nn.CrossEntropyLoss(reduction='none')
         initializer(self)
@@ -133,7 +136,7 @@ class EnhancedParser(Model):
                 tokens: Dict[str, torch.LongTensor],
                 pos_tags: torch.LongTensor = None,
                 metadata: List[Dict[str, Any]] = None,
-                arc_tags: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+                enhanced_tags: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
         """
         Parameters
@@ -146,7 +149,7 @@ class EnhancedParser(Model):
             A dictionary of metadata for each batch element which has keys:
                 tokens : ``List[str]``, required.
                     The original string tokens in the sentence.
-        arc_tags : torch.LongTensor, optional (default = None)
+        enhanced_tags : torch.LongTensor, optional (default = None)
             A torch tensor representing the sequence of integer indices denoting the parent of every
             word in the dependency parse. Has shape ``(batch_size, sequence_length, sequence_length)``.
 
@@ -217,10 +220,10 @@ class EnhancedParser(Model):
         if metadata:
             output_dict["tokens"] = [meta["tokens"] for meta in metadata]
 
-        if arc_tags is not None:
+        if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(arc_scores=arc_scores,
                                                     arc_tag_logits=arc_tag_logits,
-                                                    arc_tags=arc_tags,
+                                                    enhanced_tags=enhanced_tags,
                                                     mask=mask)
             output_dict["loss"] = arc_nll + tag_nll
             output_dict["arc_loss"] = arc_nll
@@ -228,13 +231,40 @@ class EnhancedParser(Model):
 
             # Make the arc tags not have negative values anywhere
             # (by default, no edge is indicated with -1).
-            arc_indices = (arc_tags != -1).float()
+            arc_indices = (enhanced_tags != -1).float()
             tag_mask = float_mask.unsqueeze(1) * float_mask.unsqueeze(2)
             one_minus_arc_probs = 1 - arc_probs
             # We stack scores here because the f1 measure expects a
             # distribution, rather than a single value.
+            
+            
             self._unlabelled_f1(torch.stack([one_minus_arc_probs, arc_probs], -1), arc_indices, tag_mask)
-
+            
+            
+            # work on ELAS
+            
+            output_dict = self.decode(output_dict)
+            
+            # predicted arcs, arc_tags
+            predicted_indices = output_dict["arcs"]
+            predicted_arc_tags = output_dict["arc_tags"]
+            predicted_labeled_arcs = output_dict["labeled_arcs"]
+            
+            # gold arcs, arc_tags
+            gold_arcs = [meta["arc_indices"] for meta in metadata]
+            gold_arc_tags = [meta["arc_tags"] for meta in metadata]
+            gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
+            
+            
+            #print("decoded arcs", predicted_indices)
+            #print("decoded_arc_tags", predicted_arc_tags)
+            
+            #print("gold arcs", gold_arcs)
+            #print("gold arc tags", gold_arc_tags)
+            
+            
+            self._enhanced_attachment_scores(predicted_indices, predicted_arc_tags, predicted_labeled_arcs, gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
+            
         return output_dict
 
     @overrides
@@ -245,33 +275,46 @@ class EnhancedParser(Model):
         lengths = get_lengths_from_binary_sequence_mask(mask)
         arcs = []
         arc_tags = []
+        # append arc and label to calculate ELAS
+        labeled_arcs = []
+        
         for instance_arc_probs, instance_arc_tag_probs, length in zip(arc_probs, arc_tag_probs, lengths):
 
+            # TODO: we should probably check if no tokens were over the threshold, then take the highest one
             arc_matrix = instance_arc_probs > self.edge_prediction_threshold
             edges = []
             edge_tags = []
+            edges_and_tags = []
+            
             for i in range(length):
                 for j in range(length):
+                    # check if an edge exists in the predicted adjacency matrix.
                     if arc_matrix[i, j] == 1:
-                        edges.append((i, j))
+                        head_modifier_tuple = (i, j)
+                        edges.append(head_modifier_tuple)
                         tag = instance_arc_tag_probs[i, j].argmax(-1)
                         edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
+                        # append ((h,m), label) tuple
+                        edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "labels")))
+                        
             arcs.append(edges)
             arc_tags.append(edge_tags)
+            labeled_arcs.append(edges_and_tags)
 
-        output_dict["arcs"] = arcs        
+        output_dict["arcs"] = arcs      
         output_dict["arc_tags"] = arc_tags
+        output_dict["labeled_arcs"] = labeled_arcs
         
-        print("predicted arcs and tags for tokens:")
-        print(output_dict["tokens"])
-        print(output_dict["arcs"])
-        print(output_dict["arc_tags"])
+#        print("predicted arcs and tags for tokens:")
+#        print(output_dict["tokens"])
+#        print(output_dict["arcs"])
+#        print(output_dict["arc_tags"])
         return output_dict
 
     def _construct_loss(self,
                         arc_scores: torch.Tensor,
                         arc_tag_logits: torch.Tensor,
-                        arc_tags: torch.Tensor,
+                        enhanced_tags: torch.Tensor,
                         mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the arc and tag loss for an adjacency matrix.
@@ -284,7 +327,7 @@ class EnhancedParser(Model):
         arc_tag_logits : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length, num_tags) used to generate
             a distribution over edge tags for a given edge.
-        arc_tags : ``torch.Tensor``, required.
+        enhanced_tags : ``torch.Tensor``, required.
             A tensor of shape (batch_size, sequence_length, sequence_length).
             The labels for every arc.
         mask : ``torch.Tensor``, required.
@@ -299,10 +342,10 @@ class EnhancedParser(Model):
             The negative log likelihood from the arc tag loss.
         """
         float_mask = mask.float()
-        arc_indices = (arc_tags != -1).float()
+        arc_indices = (enhanced_tags != -1).float()
         # Make the arc tags not have negative values anywhere
         # (by default, no edge is indicated with -1).
-        arc_tags = arc_tags * arc_indices
+        enhanced_tags = enhanced_tags * arc_indices
         arc_nll = self._arc_loss(arc_scores, arc_indices) * float_mask.unsqueeze(1) * float_mask.unsqueeze(2)
         # We want the mask for the tags to only include the unmasked words
         # and we only care about the loss with respect to the gold arcs.
@@ -311,7 +354,7 @@ class EnhancedParser(Model):
         batch_size, sequence_length, _, num_tags = arc_tag_logits.size()
         original_shape = [batch_size, sequence_length, sequence_length]
         reshaped_logits = arc_tag_logits.view(-1, num_tags)
-        reshaped_tags = arc_tags.view(-1)
+        reshaped_tags = enhanced_tags.view(-1)
         tag_nll = self._tag_loss(reshaped_logits, reshaped_tags.long()).view(original_shape) * tag_mask
 
         valid_positions = tag_mask.sum()
@@ -367,6 +410,16 @@ class EnhancedParser(Model):
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         metrics = {}
+        
+        #metrics_to_track = ["EUAS", "ELAS"]
+        metrics_to_track = ["unlabeled_precision", "unlabeled_recall", "unlabeled_f1", "labeled_precision", "labeled_recall", "labeled_f1"]
+        
+        # get tree scores
+        tree_results_dict = self._enhanced_attachment_scores.get_metric(reset)
+        for metric, value in tree_results_dict.items():
+            if metric in metrics_to_track:
+                metrics[metric] = value
+        
         precision, recall, f1_measure = self._unlabelled_f1.get_metric(reset)
         metrics["precision"] = precision
         metrics["recall"] = recall

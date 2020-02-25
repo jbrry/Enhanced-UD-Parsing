@@ -8,7 +8,7 @@
   //"validation_data_path": "data/UD_English-EWT/test_sample.conllu",
   "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
     "model": {
-      "type": "biaffine_parser_enhanced",
+      "type": "enhanced_parser",
       //"type": "biaffine_parser_original",
       "text_field_embedder": {
         "token_embedders": {
@@ -48,14 +48,14 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["tokens", "num_tokens"]],
-      "batch_size" : 32
+      "batch_size" : 16
     },
     "trainer": {
       "num_epochs": 50,
       "grad_norm": 5.0,
       "patience": 50,
       "cuda_device": 0,
-      "validation_metric": "+LAS",
+      "validation_metric": "+f1",
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]
