@@ -123,7 +123,8 @@ class EnhancedParser(Model):
                                "tag representation dim", "tag feedforward output dim")
         check_dimensions_match(arc_representation_dim, self.head_arc_feedforward.get_output_dim(),
                                "arc representation dim", "arc feedforward output dim")
-
+        
+        # the unlabelled_f1 is confirmed the same from both classes
         self._unlabelled_f1 = F1Measure(positive_label=1)
         self._enhanced_attachment_scores = EnhancedAttachmentScores()
         
@@ -173,7 +174,7 @@ class EnhancedParser(Model):
         encoded_text = self._dropout(encoded_text)
 
         batch_size, _, encoding_dim = encoded_text.size()
-        print(batch_size, _, encoding_dim)
+        #print(batch_size, _, encoding_dim)
 
         head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
 
@@ -236,13 +237,9 @@ class EnhancedParser(Model):
             one_minus_arc_probs = 1 - arc_probs
             # We stack scores here because the f1 measure expects a
             # distribution, rather than a single value.
-            
-            
             self._unlabelled_f1(torch.stack([one_minus_arc_probs, arc_probs], -1), arc_indices, tag_mask)
-            
-            
-            # work on ELAS
-            
+                
+            # get unlabeled and labeled f1  
             output_dict = self.decode(output_dict)
             
             # predicted arcs, arc_tags
@@ -255,15 +252,8 @@ class EnhancedParser(Model):
             gold_arc_tags = [meta["arc_tags"] for meta in metadata]
             gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
             
-            
-            #print("decoded arcs", predicted_indices)
-            #print("decoded_arc_tags", predicted_arc_tags)
-            
-            #print("gold arcs", gold_arcs)
-            #print("gold arc tags", gold_arc_tags)
-            
-            
-            self._enhanced_attachment_scores(predicted_indices, predicted_arc_tags, predicted_labeled_arcs, gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
+            self._enhanced_attachment_scores(predicted_indices, predicted_arc_tags, predicted_labeled_arcs, \
+                                             gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
             
         return output_dict
 
@@ -305,10 +295,6 @@ class EnhancedParser(Model):
         output_dict["arc_tags"] = arc_tags
         output_dict["labeled_arcs"] = labeled_arcs
         
-#        print("predicted arcs and tags for tokens:")
-#        print(output_dict["tokens"])
-#        print(output_dict["arcs"])
-#        print(output_dict["arc_tags"])
         return output_dict
 
     def _construct_loss(self,

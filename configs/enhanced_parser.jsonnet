@@ -27,7 +27,7 @@
         "input_size": 200,
         "hidden_size": 600,
         "num_layers": 3,
-        "recurrent_dropout_probability": 0.3,
+        "recurrent_dropout_probability": 0.33,
         "use_highway": true
       },
       "arc_representation_dim": 500,
@@ -48,14 +48,14 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["tokens", "num_tokens"]],
-      "batch_size" : 16
+      "batch_size" : 32
     },
     "trainer": {
-      "num_epochs": 50,
+      "num_epochs": 10,
       "grad_norm": 5.0,
       "patience": 50,
       "cuda_device": 0,
-      "validation_metric": "+f1",
+      "validation_metric": "+labeled_f1",
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]
