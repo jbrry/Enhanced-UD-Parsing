@@ -10,5 +10,5 @@ Code for enhanced UD parsing for the IWPT/UD shared task.
 
 Run code in its current format:
 ```
-allennlp train -f -s output/reader configs/enhanced_ud_parser.jsonnet --include-package tagging
+allennlp train -f configs/enhanced_parser.jsonnet -s logs/enhanced_parser/ --include-package tagging
 ```
