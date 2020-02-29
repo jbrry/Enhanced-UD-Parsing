@@ -4,6 +4,9 @@ import codecs
 
 """
 Reads a regular CoNLLU file and writes only those sentences which contain ellided tokens to an output file.
+
+Example usage: 
+    python utils/gather_ellided_sentences.py -i data/UD_English-EWT/en_ewt-ud-train.conllu -o data/UD_English-EWT/
 """
 
 parser = argparse.ArgumentParser(description='File utils')
@@ -70,8 +73,6 @@ def write_conllu(data, outfile):
                     f.write(entry)
             f.write('\n')
 
-
-
 in_name = os.path.basename(args.input)
 file_string = in_name.split('.')[0]
 tbid = file_string.split('-')[0]
@@ -97,4 +98,3 @@ print("Out of {} sentences, {} contain copy nodes".format(sent_count, num_sents_
 print("Writing output to {}".format(out_file))
 
 ellided_out = write_conllu(sents_containing_ellided_tokens, out_file)
-
