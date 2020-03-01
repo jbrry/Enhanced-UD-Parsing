@@ -15,69 +15,6 @@ from allennlp.data.tokenizers import Token, Tokenizer
 
 logger = logging.getLogger(__name__)
 
-
-def _convert_deps_to_nested_sequences(deps):
-    """
-    Converts a series of deps labels into head lists and rels lists respectively.
-    Processes copy nodes to float values.
-    # Parameters
-    deps : `List[List[Tuple[str, int]]]
-        The enhanced dependency relations.
-    # Returns
-    List-of-lists containing the enhanced heads and tags respectively.
-    """    
-    # We don't want to expand the label namespace with an additional dummy token, so we'll
-    # always give the 'ROOT_HEAD' token a label of 'root'.
-    
-    # create lists to populate target labels for rels and heads.
-    rels = []
-    heads = []
-    n_heads = []
-    
-    for target_output in deps:
-        # check if there is just 1 head
-        if len(target_output) == 1:
-            rel = [x[0] for x in target_output]
-            head = [x[1] for x in target_output]
-            rels.append(rel)
-            heads.append(head)
-            n_heads.append(1)
-        # more than 1 head
-        else:
-            # append multiple current target heads/rels together respectively.
-            current_rels = []
-            current_heads = []
-            for rel_head_tuple in target_output:
-                current_rels.append(rel_head_tuple[0])
-                current_heads.append(rel_head_tuple[1])
-            heads.append(current_heads)
-            rels.append(current_rels)
-            n_heads.append(len(current_heads))
-            
-    # process heads which may contain copy nodes
-    processed_heads = []
-
-    for head_list in heads:
-        # keep a list-of-lists format.
-        current_heads = []
-        for head in head_list:
-            # convert copy node tuples: (8, '.', 1) to float: 8.1
-            if type(head) == tuple:
-                copy_node = list(head)
-                # join the values in the tuple
-                copy_node = str(head[0]) + '.' + str(head[-1])
-                #copy_node = float(copy_node)
-                copy_node = int(copy_node)
-                current_heads.append(copy_node)
-            else:
-                # regular head index
-                current_heads.append(head)
-            
-        processed_heads.append(current_heads)
-                
-    return rels, processed_heads
-
-
 @DatasetReader.register("universal_dependencies_enhanced")
 class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
     """
@@ -107,6 +44,95 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         self.print_data = print_data
         self.tokenizer = tokenizer
 
+
+    def _convert_deps_to_nested_sequences(self, ids, deps):
+        """
+        Converts a series of deps labels into head lists and rels lists respectively.
+        Processes copy nodes to float values.
+        
+        
+        If the sentence contains ellided tokens we create a dictionary mapping from the original CoNLLU index to its new index.
+        The new index mappings will be based on the order the words appear in the sentence, for example, token index 21.1 will become 22.
+        The heads then need to be adjusted accordingly: word/head indices are as normal until a copy node is encountered, then the indexing changes.
+        If there is just one ellided token, the indexing is +1, if there are n ellided tokens it is +n but only after the index of that particular ellided token so it is just +1 until ellided token 2 is reached, then it is +2 etc.
+        e.g. old_index: new_index {22:24}.
+              
+        # Parameters
+        ids : ``List[Union[int, tuple]``
+            The original CoNLLU indices of the tokens in the sentence. They will be
+            used as keys in a dictionary to map from original to new indices.
+        deps : ``List[List[Tuple[str, int]]]``
+            The enhanced dependency relations.
+        # Returns
+        List-of-lists containing the enhanced heads and tags respectively.
+        """
+        # We don't want to expand the label namespace with an additional dummy token, so we'll
+        # always give the 'ROOT_HEAD' token a label of 'root'.
+        
+        # create lists to populate target labels for rels and heads.
+        rels = []
+        heads = []
+        n_heads = []
+            
+        for target_output in deps:
+            # check if there is just 1 head
+            if len(target_output) == 1:
+                rel = [x[0] for x in target_output]
+                head = [x[1] for x in target_output]
+                rels.append(rel)
+                heads.append(head)
+                n_heads.append(1)
+            # more than 1 head
+            else:
+                # append multiple current target heads/rels together respectively.
+                current_rels = []
+                current_heads = []
+                for rel_head_tuple in target_output:
+                    current_rels.append(rel_head_tuple[0])
+                    current_heads.append(rel_head_tuple[1])
+                heads.append(current_heads)
+                rels.append(current_rels)
+                n_heads.append(len(current_heads))
+                
+    
+        if self.contains_copy_node:
+            print("we have to augment the sentence")
+            processed_heads = []
+            # store the indices of words as they appear in the sentence        
+            index_mappings = {}
+            
+            for token_index, head_list in enumerate(heads):
+                conllu_id = ids[token_index]
+                # map the original IDs to the new IDs
+                # +1 because conllu items are 1-indexed.
+                index_mappings[conllu_id] = token_index + 1
+
+                # keep a list-of-lists format.
+                current_heads = []
+                for head in head_list:
+                    # convert copy node tuples: (8, '.', 1) to float: 8.1
+                    if type(head) == tuple:
+                        copy_node = list(head)
+                        # join the values in the tuple
+                        copy_node = str(head[0]) + '.' + str(head[-1])
+                        copy_node = float(copy_node)
+                        current_heads.append(copy_node)
+                    else:
+                        # regular head index
+                        current_heads.append(head)
+                    
+                processed_heads.append(current_heads)
+                heads = processed_heads
+            
+                print(index_mappings)
+                print(heads)
+            
+                # now go over the heads/edges and shift them
+                # TODO
+
+        return rels, heads
+
+
     @overrides
     def _read(self, file_path: str):
         # if `file_path` is a URL, redirect to the cache
@@ -116,11 +142,15 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             logger.info("Reading UD instances from conllu dataset at: %s", file_path)
 
             num_copy_nodes = 0
-            
+                 
             for annotation in parse_incr(conllu_file):
+                self.contains_copy_node = False
+                
                 # check for presence of copy nodes
-                contains_copy_node = [x for x in annotation if not isinstance(x["id"], int)]
-                if contains_copy_node:
+                copy_node = [x for x in annotation if not isinstance(x["id"], int)]
+                if copy_node:
+                    self.contains_copy_node = True
+                    
                     # count number of copy nodes in misc column.
                     misc = [x["misc"] for x in annotation]
                     for misc_item in misc:
@@ -131,6 +161,16 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                                     num_copy_nodes += 1
                 
                 ids = [x["id"] for x in annotation]
+                
+                # fix tuple IDs e.g. (8, '.', 1) to 8.1
+                if self.contains_copy_node:
+                    for index, conllu_id in enumerate(ids):
+                        if type(conllu_id) == tuple:
+                            copy_node = list(conllu_id)
+                            copy_node = str(copy_node[0]) + '.' + str(copy_node[-1])
+                            copy_node = float(copy_node)                            
+                            ids[index] = copy_node
+                
                 # regular case: only uses regular indices.                   
                 #annotation = [x for x in annotation if isinstance(x["id"], int)]
                 
@@ -166,7 +206,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         pos_tags: List[str],
         dependencies: List[Tuple[str, int]] = None,
         deps: List[List[Tuple[str, int]]] = None,
-        ids: List[str] = None
+        ids: List[str] = None,
+        contains_copy_node: bool = False,
     ) -> Instance:
 
         """
@@ -195,7 +236,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         
         fields["pos_tags"] = SequenceLabelField(pos_tags, token_field, label_namespace="pos_tags")
         
-        # basic dependency labels
+        #### basic dependency labels
 #        if dependencies is not None:
 #            # We don't want to expand the label namespace with an additional dummy token, so we'll
 #            # always give the 'ROOT_HEAD' token a label of 'root'.
@@ -207,7 +248,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 #            )
 
 
-        #### try regular deps
+        #### regular deps with adjacency matrix
         #if dependencies is not None:
             #arc_indices = []
             #arc_tags = []
@@ -229,24 +270,16 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 #fields["arc_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
                 #print(fields["arc_tags"])
 
-
-        #### try regular model with multiple edges (enhanced) (no ROOT)
+        #### enhanced deps
         if deps is not None:
-            enhanced_arc_tags, enhanced_arc_indices = _convert_deps_to_nested_sequences(deps)
+            enhanced_arc_tags, enhanced_arc_indices = self._convert_deps_to_nested_sequences(ids, deps)
      
             assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
-            
-            # labels need to be 0-indexed for AdjacencyMatrix row-column indexing.
-            # which leads to the question, how do we index a ROOT (0) node here?
-            # should we just assume that (0, 0) is always ROOT?
+
             arc_indices = []
             arc_tags = []
             arc_indices_and_tags = []
             
-            # model multiple head-dependent relations:
-            # for each token, create an edge from the token's head(s) to it, e.g. (h, m)
-            # there can be multiple (h, m) tuples for the same modifier.
-            # CoNLLU indices start from 1
             # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.      
             for modifier, head_list in enumerate(enhanced_arc_indices, start=1):
                 for head in head_list:
@@ -263,13 +296,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 arc_indices_and_tags.append((arc_index, arc_tag))
 
             if arc_indices is not None and arc_tags is not None:
-#                print(tokens)
-#                print(arc_indices)
-#                print(arc_tags)
-#                print("len tokens ", len(tokens))
-#                print("len arc indices ", len(arc_indices))
-#                print("len arc tags ", len(arc_tags))
-                
+                #token_field_with_root = TextField([Token("ROOT_HEAD")] + [Token(t) for t in tokens], self._token_indexers)
                 token_field_with_root = ['root'] + tokens
                 fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
                 
