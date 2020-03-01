@@ -91,8 +91,9 @@ for sent in sentences:
     for conllu_row in sent:
         # check for copy node (ellided token)
         if "CopyOf" in conllu_row:
-            sents_containing_ellided_tokens.append(sent)
-            num_sents_with_ellided_tokens += 1
+            if sent not in sents_containing_ellided_tokens:
+                sents_containing_ellided_tokens.append(sent)
+                num_sents_with_ellided_tokens += 1
 
 print("Out of {} sentences, {} contain copy nodes".format(sent_count, num_sents_with_ellided_tokens))
 print("Writing output to {}".format(out_file))
