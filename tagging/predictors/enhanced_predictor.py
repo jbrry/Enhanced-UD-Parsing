@@ -40,7 +40,6 @@ class EnhancedPredictor(Predictor):
     @overrides
     def predict_instance(self, instance: Instance) -> JsonDict:
         if "@@UNKNOWN@@" not in self._model.vocab._token_to_index["arc_tags"]:
-            print("found unknown label")
             # Handle cases where the labels are present in the test set but not training set
             # https://github.com/Hyperparticle/udify/blob/b6a1173e7e5fc1e4c63f4a7cf1563b469268a3b8/udify/predictors/predictor.py
             self._predict_unknown(instance)
@@ -69,6 +68,13 @@ class EnhancedPredictor(Predictor):
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
         global sentence_index
+        
+        # TODO:
+        # add the dictionary original_to_new_ids
+        # which will have the original float keys e.g. 8.1 to their 1-indexed IDs.
+        # the parser will predict an edge to 9 so we need to convert it back to 8.1.
+        # also if there were multiple ellided tokens in a sentence, the indices
+        # are shifted so a head of 25 would actually correspond to 23.
 
         sentence_index += 1
         sent_id = ('# sent_id = ' + str(sentence_index))
