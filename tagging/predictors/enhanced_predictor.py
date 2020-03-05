@@ -115,13 +115,13 @@ class EnhancedPredictor(Predictor):
         
         lines = zip(*[outputs[k] if k in outputs else ["_"] * word_count
                       for k in ["ids", "tokens", "lemmas", "pos", "xpos", "feats",
-                                "heads", "arc_tags"]])
+                                "head_indices", "head_tags", "arc_tags"]])
 
         output_lines = []
         for i, line in enumerate(lines):
             line = [str(l) for l in line]
 
-            row = "\t".join(line) + "".join(["\t_"] * 2)
+            row = "\t".join(line) + "".join(["\t_"] * 1)
             output_lines.append(row)
 
         output_lines = [sent_id] + [text] + output_lines

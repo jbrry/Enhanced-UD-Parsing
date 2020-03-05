@@ -140,9 +140,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             
             heads = augmented_heads
             
-            #print("mapping dict: \t", index_mappings)
-            #print("processed heads: \t {}, augmented heads: \t {}".format(processed_heads, heads))
-            #print("augmented heads \t", augmented_heads)
+            print("mapping dict: \t", index_mappings)
+            print("processed heads: \t", processed_heads)
+            print("augmented heads \t", augmented_heads)
 
             # we need to adjust this in the evaluation as well (so it knows that 8.1 is now 9 etc.)
 
@@ -253,34 +253,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         fields["pos_tags"] = SequenceLabelField(pos_tags, token_field, label_namespace="pos_tags")
         
         #### basic dependency tree
-#        if dependencies is not None:
-#            # We don't want to expand the label namespace with an additional dummy token, so we'll
-#            # always give the 'ROOT_HEAD' token a label of 'root'.
+        if dependencies is not None:
+            head_tags = [x[0] for x in dependencies]
+            head_indices = [x[1] for x in dependencies]
+                       
+            # We don't want to expand the label namespace with an additional dummy token, so we'll
+            # always give the 'ROOT_HEAD' token a label of 'root'.
 #            fields["head_tags"] = SequenceLabelField(
 #                [x[0] for x in dependencies], token_field, label_namespace="head_tags"
 #            )
 #            fields["head_indices"] = SequenceLabelField(
 #                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
 #            )
-
-
-        #### basic dependency tree with adjacency matrix
-#        if dependencies is not None:
-#            arc_indices = []
-#            arc_tags = []
-#            arc_indices_and_tags = []
-    
-#            for modifier, target in enumerate(dependencies, start=1):
-#                    label = target[0]
-#                    head_index = target[1]
-#                    arc_indices.append((head_index, modifier))                
-#                    arc_tags.append(label)
         
-#                    token_field_with_root = ['root'] + tokens
-#                    fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
-        
-#            for arc_index, arc_tag in zip(arc_indices, arc_tags):
-#                arc_indices_and_tags.append((arc_index, arc_tag))
 
         #### enhanced deps
         if deps is not None:
@@ -288,13 +273,13 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
      
             assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
 
-            print("new heads", enhanced_arc_indices)
+            #print("new heads", enhanced_arc_indices)
 
             arc_indices = []
             arc_tags = []
             arc_indices_and_tags = []
             
-            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.      
+            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.     
             for modifier, head_list in enumerate(enhanced_arc_indices, start=1):
                 for head in head_list:
                     #print(head, "==>", modifier)
@@ -309,13 +294,29 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             for arc_index, arc_tag in zip(arc_indices, arc_tags):
                 arc_indices_and_tags.append((arc_index, arc_tag))
 
-            print("input to field: ", arc_indices_and_tags)
+            #print("input to field: ", arc_indices_and_tags)
 
             if arc_indices is not None and arc_tags is not None:
                 #token_field_with_root = TextField([Token("ROOT_HEAD")] + [Token(t) for t in tokens], self._token_indexers)
                 token_field_with_root = ['root'] + tokens
                 fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
-                
-        fields["metadata"] = MetadataField({"tokens": tokens, "pos_tags": pos_tags, "ids": ids, "arc_indices": arc_indices, "arc_tags": arc_tags, "labeled_arcs": arc_indices_and_tags})
+        
+
+
+        fields["metadata"] = MetadataField({
+            "tokens": tokens,
+            "pos_tags": pos_tags,
+            #"xpos_tags": xpos_tags,
+            #"feats": feats,
+            #"lemmas": lemmas,
+            "ids": ids,
+            "head_tags": head_tags,
+            "head_indices": head_indices,
+            "arc_indices": arc_indices,
+            "arc_tags": arc_tags,
+            "labeled_arcs": arc_indices_and_tags
+        })
+        
+
 
         return Instance(fields)
