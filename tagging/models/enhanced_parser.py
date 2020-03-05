@@ -222,6 +222,8 @@ class EnhancedParser(Model):
         if metadata:
             output_dict["ids"] = [meta["ids"] for meta in metadata]
             output_dict["tokens"] = [meta["tokens"] for meta in metadata]
+            output_dict["head_tags"] = [meta["head_tags"] for meta in metadata]
+            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata]
             
 
         if enhanced_tags is not None:
@@ -326,9 +328,9 @@ class EnhancedParser(Model):
                         probability = instance_arc_probs[i, j]
                         head_choices[j].append((head_modifier_tuple, probability))
                         
-                for unassigned_token, edge_score_tuple in head_choices.items():
+                for unassigned_token, edge_score_tuples in head_choices.items():
                     # get the best edge for each unassigned token based on the score which is element [1] in the tuple.
-                    best_edge = max(edge_score_tuple, key = itemgetter(1))[0]
+                    best_edge = max(edge_score_tuples, key = itemgetter(1))[0]
                     #print("best edge!", best_edge)
                     
                     edges.append(best_edge)

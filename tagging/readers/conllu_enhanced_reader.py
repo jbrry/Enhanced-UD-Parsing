@@ -34,14 +34,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         self,
         token_indexers: Dict[str, TokenIndexer] = None,
         use_language_specific_pos: bool = False,
-        print_data: bool = False,
         tokenizer: Tokenizer = None,
         lazy: bool = False,
     ) -> None:
         super().__init__(lazy)
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
         self.use_language_specific_pos = use_language_specific_pos
-        self.print_data = print_data
         self.tokenizer = tokenizer
 
 
@@ -84,7 +82,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 n_heads.append(1)
             # more than 1 head
             else:
-                # append multiple current target heads/rels together respectively.
+                # append multiple current target heads/rels together respectively
                 current_rels = []
                 current_heads = []
                 for rel_head_tuple in target_output:
@@ -93,21 +91,21 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 heads.append(current_heads)
                 rels.append(current_rels)
                 n_heads.append(len(current_heads))
-                
-    
+        
+        
         if self.contains_copy_node:
+            
             processed_heads = []
             
             # store the indices of words as they appear in the sentence        
-            index_mappings = {}
+            original_to_new_indices = {}
             # set a placeholder for ROOT
-            index_mappings[0] = 0
+            original_to_new_indices[0] = 0
             
             for token_index, head_list in enumerate(heads):
                 conllu_id = ids[token_index]
-                # map the original IDs to the new IDs
-                # +1 because conllu items are 1-indexed
-                index_mappings[conllu_id] = token_index + 1
+                # map the original CoNLLU IDs to the new 1-indexed IDs
+                original_to_new_indices[conllu_id] = token_index + 1
 
                 # keep a list-of-lists format
                 current_heads = []
@@ -125,26 +123,23 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     
                 processed_heads.append(current_heads)
             
-            
-            # change the indices of the heads to reflec the new order
+            # change the indices of the heads to reflect the new order
             augmented_heads = []
             for head_list in processed_heads:
                 current_heads = []
                 for head in head_list:
-                    if head in index_mappings.keys():
+                    if head in original_to_new_indices.keys():
                         # take the 1-indexed head based on the order of words in the sentence
-                        augmented_head = index_mappings[head]
+                        augmented_head = original_to_new_indices[head]
                         print(augmented_head)
                         current_heads.append(augmented_head)
                 augmented_heads.append(current_heads)
             
             heads = augmented_heads
             
-            print("mapping dict: \t", index_mappings)
+            print("mapping dict: \t", original_to_new_indices)
             print("processed heads: \t", processed_heads)
             print("augmented heads \t", augmented_heads)
-
-            # we need to adjust this in the evaluation as well (so it knows that 8.1 is now 9 etc.)
 
         return rels, heads
 
@@ -167,7 +162,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 if copy_node:
                     self.contains_copy_node = True
                     
-                    # count number of copy nodes in misc column.
+                    # count number of copy nodes in misc column
                     misc = [x["misc"] for x in annotation]
                     for misc_item in misc:
                         if misc_item is not None:
@@ -201,16 +196,6 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 tags = [x["deprel"] for x in annotation]
                 deps = [x["deps"] for x in annotation]
     
-                if self.print_data:
-                    print("next example:")
-                    print("=" * 15)
-                    print("tokens: {} ".format(tokens))
-                    print("tags: {} ".format(tags))
-                    print("heads: {} ".format(heads))
-                    print("deps: {} ".format(deps))
-                    print("=" * 15)
-                    print("\n")
-
                 yield self.text_to_instance(tokens, pos_tags, list(zip(tags, heads)), deps, ids)
                 
         logger.info("Found %s copy nodes ", num_copy_nodes)
@@ -279,10 +264,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             arc_tags = []
             arc_indices_and_tags = []
             
-            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc.     
+            # NOTE: this currently assumes every token in the sentence has a head, might not be the case for MWT where head is "_" etc. 
             for modifier, head_list in enumerate(enhanced_arc_indices, start=1):
                 for head in head_list:
-                    #print(head, "==>", modifier)
                     arc_indices.append((head, modifier))
 
             for relation_list in enhanced_arc_tags:
@@ -294,10 +278,9 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             for arc_index, arc_tag in zip(arc_indices, arc_tags):
                 arc_indices_and_tags.append((arc_index, arc_tag))
 
-            #print("input to field: ", arc_indices_and_tags)
+            print("input to field: ", arc_indices_and_tags)
 
             if arc_indices is not None and arc_tags is not None:
-                #token_field_with_root = TextField([Token("ROOT_HEAD")] + [Token(t) for t in tokens], self._token_indexers)
                 token_field_with_root = ['root'] + tokens
                 fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
         
