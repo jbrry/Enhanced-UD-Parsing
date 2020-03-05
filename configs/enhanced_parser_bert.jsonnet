@@ -30,7 +30,7 @@ local recurrent_dropout_probability = 0.5;
       }
   },
   "train_data_path": "data/UD_English-EWT/en_ewt-ud-train_no_ellipsis.conllu",
-  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-train_no_ellipsis.conllu",
+  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
   //"train_data_path": "data/UD_English-EWT/en_ewt-ud-train-ellided_only.conllu",
   //"train_data_path": "data/UD_English-EWT/en_ewt-ud-train.conllu",
   //"validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev.conllu",

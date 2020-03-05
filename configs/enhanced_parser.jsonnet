@@ -3,10 +3,13 @@
         //"type":"universal_dependencies"
         "type":"universal_dependencies_enhanced"
     },
-  "train_data_path": "data/UD_English-EWT/en_ewt-ud-train-ellided_only.conllu",
-  //"train_data_path": "data/UD_English-EWT/y.conllu",
+  
+  "train_data_path": "data/UD_English-EWT/en_ewt-ud-train_no_ellipsis.conllu",
+  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
+  //"train_data_path": "data/UD_English-EWT/en_ewt-ud-train-ellided_only.conllu",
+  //"train_data_path": "data/UD_English-EWT/en_ewt-ud-train.conllu",
   //"validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev.conllu",
-  "validation_data_path": "data/UD_English-EWT/en_ewt-ud-train-ellided_only.conllu",
+  //"validation_data_path": "data/UD_English-EWT/en_ewt-ud-train-ellided_only.conllu",
     "model": {
       "type": "enhanced_parser",
       //"type": "biaffine_parser_original",
