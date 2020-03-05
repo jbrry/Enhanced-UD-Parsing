@@ -1,6 +1,7 @@
 from typing import Dict, Optional, Tuple, Any, List
 import logging
 import copy
+from operator import itemgetter 
 
 from overrides import overrides
 import torch
@@ -219,7 +220,9 @@ class EnhancedParser(Model):
                 }
 
         if metadata:
+            output_dict["ids"] = [meta["ids"] for meta in metadata]
             output_dict["tokens"] = [meta["tokens"] for meta in metadata]
+            
 
         if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(arc_scores=arc_scores,
@@ -244,13 +247,19 @@ class EnhancedParser(Model):
             
             # predicted arcs, arc_tags
             predicted_indices = output_dict["arcs"]
+            #print("predicted_indices", predicted_indices)
             predicted_arc_tags = output_dict["arc_tags"]
+            #print("predicted_arc_tags", predicted_arc_tags)
             predicted_labeled_arcs = output_dict["labeled_arcs"]
+            #print("predicted_labeled_arcs", predicted_labeled_arcs)
             
             # gold arcs, arc_tags
             gold_arcs = [meta["arc_indices"] for meta in metadata]
+            #print("gold arcs", gold_arcs)
             gold_arc_tags = [meta["arc_tags"] for meta in metadata]
+            #print("gold arc tags", gold_arc_tags)
             gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
+            #print("gold labeled arcs", gold_labeled_arcs)
             
             self._enhanced_attachment_scores(predicted_indices, predicted_arc_tags, predicted_labeled_arcs, \
                                              gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
@@ -260,6 +269,7 @@ class EnhancedParser(Model):
     @overrides
     def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         arc_tag_probs = output_dict["arc_tag_probs"].cpu().detach().numpy()
+        #print("arc_tag_probs", arc_tag_probs)
         arc_probs = output_dict["arc_probs"].cpu().detach().numpy()
         mask = output_dict["mask"]
         lengths = get_lengths_from_binary_sequence_mask(mask)
@@ -269,15 +279,22 @@ class EnhancedParser(Model):
         labeled_arcs = []
         
         for instance_arc_probs, instance_arc_tag_probs, length in zip(arc_probs, arc_tag_probs, lengths):
-
-            # TODO: we should probably check if no tokens were over the threshold, then take the highest one
             arc_matrix = instance_arc_probs > self.edge_prediction_threshold
+
             edges = []
             edge_tags = []
             edges_and_tags = []
             
+            # dictionary where a word has been assigned a head
+            found_heads = {}
+            
+            # set each label to False but will be updated as True if the word has a head over the threshold.
             for i in range(length):
-                for j in range(length):
+                found_heads[i] = False
+            
+            # i is whether the word is a head
+            for i in range(length):            
+                for j in range(length):             
                     # check if an edge exists in the predicted adjacency matrix.
                     if arc_matrix[i, j] == 1:
                         head_modifier_tuple = (i, j)
@@ -286,12 +303,44 @@ class EnhancedParser(Model):
                         edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
                         # append ((h,m), label) tuple
                         edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "labels")))
+                        found_heads[j] = True
                         
+            # some words won't have found heads so we will find the edge with the highest probability for each unassigned word
+            # could lower the threshold for these cases or else just do the max
+            head_information = found_heads.items()
+            unassigned_tokens = []
+            for (word, has_found_head) in head_information:
+                # not interested in selecting heads for the dummy ROOT token
+                if has_found_head == False and word != 0:
+                    unassigned_tokens.append(word)
+                                
+            if len(unassigned_tokens) >= 1:
+                head_choices = {unassigned_token: [] for unassigned_token in unassigned_tokens}
+                
+                # keep track of the probabilities of the other words being heads of the unassigned tokens
+                for i in range(length):
+                    for j in unassigned_tokens:
+                        # edge
+                        head_modifier_tuple = (i, j)
+                        # score
+                        probability = instance_arc_probs[i, j]
+                        head_choices[j].append((head_modifier_tuple, probability))
+                        
+                for unassigned_token, edge_score_tuple in head_choices.items():
+                    # get the best edge for each unassigned token based on the score which is element [1] in the tuple.
+                    best_edge = max(edge_score_tuple, key = itemgetter(1))[0]
+                    #print("best edge!", best_edge)
+                    
+                    edges.append(best_edge)
+                    tag = instance_arc_tag_probs[best_edge].argmax(-1)                   
+                    edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
+                    edges_and_tags.append((best_edge, self.vocab.get_token_from_index(tag, "labels")))
+
             arcs.append(edges)
             arc_tags.append(edge_tags)
             labeled_arcs.append(edges_and_tags)
 
-        output_dict["arcs"] = arcs      
+        output_dict["arcs"] = arcs  
         output_dict["arc_tags"] = arc_tags
         output_dict["labeled_arcs"] = labeled_arcs
         

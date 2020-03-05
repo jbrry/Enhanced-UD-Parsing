@@ -46,7 +46,7 @@ class EnhancedPredictor(Predictor):
             self._predict_unknown(instance)
 
         outputs = self._model.forward_on_instance(instance)
-        #print(outputs)
+
         return sanitize(outputs)
 
     def _predict_unknown(self, instance: Instance):
@@ -64,6 +64,8 @@ class EnhancedPredictor(Predictor):
                                                  else token
                                                  for label in instance.fields[namespace].labels]
 
+
+
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
         global sentence_index
@@ -73,9 +75,47 @@ class EnhancedPredictor(Predictor):
         text = ('# text = ' + ' '.join(w for w in outputs["tokens"]))
 
         word_count = len([word for word in outputs["tokens"]])
+
+        predicted_arcs = outputs["arcs"]
+        predicted_arc_tags = outputs["arc_tags"]
+                
+        # create dict to store mappings from CoNLLU ids to dependency relations
+        id_to_deprel_mappings = {conllu_id: [] for conllu_id in outputs["ids"]}
+
+        for label_index, (head, dep) in enumerate(predicted_arcs):
+            if dep in id_to_deprel_mappings:
+                id_to_deprel_mappings[dep].append((head, predicted_arc_tags[label_index]))
+
+        # another dict to store the formatted deprels
+        id_to_formatted_deprel_mappings = {}
+        
+        for conllu_id, pred_output in id_to_deprel_mappings.items():            
+            # keep a list for words with multiple heads
+            current_targets = []
+            
+            num_deprels = len(pred_output)
+            for head_rel_tuple in pred_output:    
+                target = ":".join(str(x) for x in head_rel_tuple)                                
+                if num_deprels == 1:
+                    id_to_formatted_deprel_mappings[conllu_id] = target                
+                elif num_deprels > 1:
+                    # add deprels to list so they can be joined
+                    current_targets.append(target)            
+
+            if num_deprels > 1:
+                # pipe-join multiple deprels
+                formatted_target = "|".join(str(x) for x in current_targets)
+                id_to_formatted_deprel_mappings[conllu_id] = formatted_target
+
+        print("id_to_formatted_deprel_mappings", id_to_formatted_deprel_mappings)
+           
+        # restructure the outputs to match the CoNLLU format
+        outputs["arc_tags"] = id_to_formatted_deprel_mappings.values()
+                
+        
         lines = zip(*[outputs[k] if k in outputs else ["_"] * word_count
-                      for k in ["tokens", "lemmas", "pos", "xpos", "feats",
-                                "arcs", "arc_tags"]])
+                      for k in ["ids", "tokens", "lemmas", "pos", "xpos", "feats",
+                                "heads", "arc_tags"]])
 
         output_lines = []
         for i, line in enumerate(lines):
