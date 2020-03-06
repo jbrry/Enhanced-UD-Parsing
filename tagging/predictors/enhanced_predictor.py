@@ -69,12 +69,9 @@ class EnhancedPredictor(Predictor):
     def dump_line(self, outputs: JsonDict) -> str:
         global sentence_index
         
-        # TODO:
-        # add the dictionary original_to_new_ids
-        # which will have the original float keys e.g. 8.1 to their 1-indexed IDs.
-        # the parser will predict an edge to 9 so we need to convert it back to 8.1.
-        # also if there were multiple ellided tokens in a sentence, the indices
-        # are shifted so a head of 25 would actually correspond to 23.
+        # __main__.UDError: The collapsed CoNLL-U line still contains empty nodes: 8.1	reported	report	VERB	VBN	Tense=Past|VerbForm=Part|Voice=Pass	_	_	5:conj:and	CopyOf=5
+        # need to run: perl enhanced_collapse_empty_nodes.pl enhanced.conllu > collapsed.conllu as per the suggestions here: https://github.com/UniversalDependencies/tools/blob/master/README.txt
+        # The input to the evaluation script should be a version of the gold and system output where empty nodes have been eliminated using the technique described above 
 
         sentence_index += 1
         sent_id = ('# sent_id = ' + str(sentence_index))
@@ -84,11 +81,39 @@ class EnhancedPredictor(Predictor):
 
         predicted_arcs = outputs["arcs"]
         predicted_arc_tags = outputs["arc_tags"]
+        
+        # changes None to "_"
+        #cleaned_heads = []
+        #predicted_heads = outputs["head_indices"]
+        #for head in predicted_heads:
+        #    if type(head) != int:
+        #        head = "_"
+        #        cleaned_heads.append(head)
+        #    else:
+        #        cleaned_heads.append(head)
+        #outputs["head_indices"] = cleaned_heads
+        
                 
+        # dictionary mapping original conllu IDs (which contain float-values) to 1-indexed IDs as they appear in the sentence
+        # if there are no ellided tokens this is None
+        original_to_new_indices = outputs["original_to_new_indices"]
+
         # create dict to store mappings from CoNLLU ids to dependency relations
         id_to_deprel_mappings = {conllu_id: [] for conllu_id in outputs["ids"]}
 
         for label_index, (head, dep) in enumerate(predicted_arcs):
+            # change the head and dep to the original indices
+            
+            if type(original_to_new_indices) == dict:
+                original_to_new_index_mappings = original_to_new_indices.items()
+            
+                for mapping in original_to_new_index_mappings:
+                    # if head or dep is the newer index[1]; change back to the original index[0]
+                    if head == mapping[1]:
+                        head = mapping[0]
+                    if dep == mapping[1]:
+                        dep = mapping[0]
+            
             if dep in id_to_deprel_mappings:
                 id_to_deprel_mappings[dep].append((head, predicted_arc_tags[label_index]))
 

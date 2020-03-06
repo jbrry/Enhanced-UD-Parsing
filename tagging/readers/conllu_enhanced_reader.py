@@ -48,12 +48,11 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         Converts a series of deps labels into head lists and rels lists respectively.
         Processes copy nodes to float values.
         
-        
-        If the sentence contains ellided tokens we create a dictionary mapping from the original CoNLLU index to its new index.
-        The new index mappings will be based on the order the words appear in the sentence, for example, token index 21.1 will become 22.
-        The heads then need to be adjusted accordingly: word/head indices are as normal until a copy node is encountered, then the indexing changes.
-        If there is just one ellided token, the indexing is +1, if there are n ellided tokens it is +n but only after the index of that particular ellided token so it is just +1 until ellided token 2 is reached, then it is +2 etc.
-        e.g. old_index: new_index {22:24}.
+        If the sentence contains ellided tokens, we create a dictionary which maps the original CoNLLU indices to 
+        indices as they appear in the sentence. This means that when an ellided token is encountered, e.g. "8.1",
+        we map it to index 9 and offset every other index following this token by +1.
+        This process is done every time an ellided token is encountered.
+        At decoding the time, the (head : dependent) tuples are converted back to the original indices.
               
         # Parameters
         ids : ``List[Union[int, tuple]``
@@ -131,17 +130,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     if head in original_to_new_indices.keys():
                         # take the 1-indexed head based on the order of words in the sentence
                         augmented_head = original_to_new_indices[head]
-                        print(augmented_head)
                         current_heads.append(augmented_head)
                 augmented_heads.append(current_heads)
             
             heads = augmented_heads
             
-            print("mapping dict: \t", original_to_new_indices)
-            print("processed heads: \t", processed_heads)
-            print("augmented heads \t", augmented_heads)
+            #print("mapping dict: \t", original_to_new_indices)
+            #print("processed heads: \t", processed_heads)
+            #print("augmented heads \t", augmented_heads)
+        
+        else:
+            original_to_new_indices = None
 
-        return rels, heads
+        return rels, heads, original_to_new_indices
 
 
     @overrides
@@ -254,11 +255,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         #### enhanced deps
         if deps is not None:
-            enhanced_arc_tags, enhanced_arc_indices = self._convert_deps_to_nested_sequences(ids, deps)
+            enhanced_arc_tags, enhanced_arc_indices, original_to_new_indices = self._convert_deps_to_nested_sequences(ids, deps)
      
             assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
 
             #print("new heads", enhanced_arc_indices)
+            print(original_to_new_indices)
 
             arc_indices = []
             arc_tags = []
@@ -293,13 +295,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             #"feats": feats,
             #"lemmas": lemmas,
             "ids": ids,
+            "original_to_new_indices": original_to_new_indices,
             "head_tags": head_tags,
             "head_indices": head_indices,
             "arc_indices": arc_indices,
             "arc_tags": arc_tags,
             "labeled_arcs": arc_indices_and_tags
         })
-        
-
 
         return Instance(fields)
