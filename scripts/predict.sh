@@ -40,7 +40,7 @@ for tbid in $TBIDS ; do
   perl ${UD_TOOLS_DIR}/enhanced_collapse_empty_nodes.pl ${GOLD} > output/${tbid}_gold_collapsed.conllu
 
   # collapse empty nodes in pred file
-  perl ${UD_TOOLS_DIR}/enhanced_collapse_empty_nodes.pl output/${tbid}_pred.conllu > output/${tbid}_pred_collapsed.conllu
+  perl ${UD_TOOLS_DIR}/enhanced_collapse_empty_nodes.pl ${PRED} > output/${tbid}_pred_collapsed.conllu
 
   echo "Running UD Shared Task evaluation script"
   python scripts/iwpt20_xud_eval.py --verbose output/${tbid}_gold_collapsed.conllu output/${tbid}_pred_collapsed.conllu
