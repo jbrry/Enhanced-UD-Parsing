@@ -221,6 +221,7 @@ class EnhancedParser(Model):
 
         if metadata:
             output_dict["ids"] = [meta["ids"] for meta in metadata]
+            output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]  #      metadata["original_to_new_indices"] #[meta["ids"] for meta in metadata]
             output_dict["tokens"] = [meta["tokens"] for meta in metadata]
             output_dict["head_tags"] = [meta["head_tags"] for meta in metadata]
             output_dict["head_indices"] = [meta["head_indices"] for meta in metadata]
