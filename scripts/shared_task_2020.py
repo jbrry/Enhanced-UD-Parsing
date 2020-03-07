@@ -198,7 +198,11 @@ Options:
                 raise ValueError('No config found in %r' %(globals().keys()))
             if tbid in self.configs:
                 print('Warning: duplicate TBID', tbid)
-            self.configs[tbid] = config_class(tbid, lcode)
+            # create all config variants for this tbid
+            configs_for_tbid = []
+            for variant in config_class(tbid, lcode).get_variants():
+                configs_for_tbid.append(config_class(tbid, lcode, variant))
+            self.configs[tbid] = configs_for_tbid
         if opt_debug:
             print('tasks:', self.tasks)
             print('training_data:', self.training_data)
@@ -206,29 +210,78 @@ Options:
     
 class Config_default:
 
-    def __init__(self, tbid, lcode):
+    def __init__(self, tbid, lcode, variant = None):
         self.tbid = tbid
         self.lcode = lcode
-        self.init_basic_parser(lcode)
+        self.variant = variant
+        self.segmenter = None
+        self.basic_parsers = []
+        self.enhanced_parser = None
+        if variant is not None:
+            self.init_segmenter()
+            self.init_basic_parser()
+            self.init_enhanced_parser()
 
     def __repr__(self):
-        return '<Default config for %r with parsers %r>' %(
-            self.tbid, self.basic_parsers
+        return '<Default config for %r with variant %r>' %(
+            self.tbid, self.variant
         )
 
-    def init_basic_parser(self, lcode, n_parsers = 5):
+    def is_operational(self):
+        if self.segmenter is None:
+            return False
+        if not self.basic_parsers:
+            return False
+        if self.enhanced_parser is None:
+            return False
+        return True
+
+    def get_variants(self):
+        basic_parser_ensemble_size = self.get_basic_parser_ensemble_size()
+        for segmenter in self.get_segmenters():
+            basic_parsers = list(self.get_basic_parsers())
+            # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
+            n_basic_parsers = len(basic_parsers)
+            for combination_index in range(1, 1 << n_basic_parsers):
+                combination = [basic_parsers[j]
+                    for j in range(n_basic_parsers)
+                    if (combination_index & (1 << j))
+                ]
+                if len(combination) > basic_parser_ensemble_size:
+                    continue
+                for enhanced_parser in self.get_enhanced_parsers():
+                    yield (segmenter, combination, enhanced_parser)
+
+    def get_segmenter_names(self):
+        return ['udpipe_standard', 'udpipe_augmented', 'udpipe_polyglot', 'uusegmenter']
+
+    def get_basic_parser_names(self):
+        return ['elmo_udpf', 'fasttext_udpf', 'plain_udpf', 'udify']
+
+    def get_basic_parser_ensemble_size(self):
+        return 3
+
+    def get_basic_parsers(self):
+        retval = []
+        for candidate_parser in self.get_basic_parser_names():
+            parser_module = importlib.import_module(candidate_parser)
+            if parser_module.supports(self.lcode):
+                retval.append(candidate_parser)
+        return retval
+
+    def get_enhanced_parsers(self):
+        return ['enhanced_parser']
+
+    def init_basic_parser(self):
         self.basic_parsers = []
-        for embedding in ('contextualised', 'external', 'internal'):
-            parsers = self.get_basic_parsers(lcode, embedding)
-            if parsers:
-                break
+        parsers = self.variant[1].split(':')
         if not parsers:
-            print('Warning: No parser found that supports', lcode)
-        for index in range(n_parsers):
+            print('Warning: No parser found that supports', self.lcode)
+        for index in range(self.get_basic_parser_ensemble_size()):
             round_robin_choice = parsers[index % len(parsers)]
             self.basic_parsers.append(round_robin_choice)
         
-    def get_basic_parsers(self, lcode, embedding):
+    def get_basic_parsers(self, embedding):
         if embedding == 'contextualised':
             parsers = self.get_basic_parsers_with_contextualised_embedding()
         elif embedding == 'external':
@@ -241,7 +294,7 @@ class Config_default:
         # filter for lcode
         for parser_name in parsers:
             parser_module = importlib.import_module(parser_name)
-            if parser_module.supports(lcode):
+            if parser_module.supports(self.lcode):
                 retval.append(parser_name)
         return retval
 
