@@ -1,37 +1,62 @@
+local word_embedding_dim = 100;
+local char_embedding_dim = 64;
+local pos_embedding_dim = 100;
+local embedding_dim = word_embedding_dim + pos_embedding_dim + char_embedding_dim + char_embedding_dim;
+local hidden_dim = 600;
+local num_epochs = 50;
+local patience = 10;
+local batch_size = 32;
+local learning_rate = 0.001;
+
 {
-    "dataset_reader":{
-        //"type":"universal_dependencies"
-        "type":"universal_dependencies_enhanced"
+  "dataset_reader":{
+    "type":"universal_dependencies_enhanced",
+      "token_indexers": {
+        "tokens": { 
+        "type": "single_id" 
+        },
+        "token_characters": { 
+        "type": "characters",
+        "min_padding_length": 3
+        }
+      }
     },
-  "train_data_path": "data/train-dev/UD_Lithuanian-ALKSNIS/lt_alksnis-ud-train.conllu",
-  "validation_data_path": "data/train-dev/UD_Lithuanian-ALKSNIS/lt_alksnis-ud-dev.conllu",
-  //"train_data_path": "data/UD_Swedish-Talbanken/sv_talbanken-ud-dev.conllu",
-  //"validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev_no_ellipsis.conllu",
-  //"train_data_path": "data/UD_English-EWT/en_ewt-ud-train-ellided_only.conllu",
-  //"train_data_path": "data/UD_English-EWT/en_ewt-ud-train.conllu",
-  //"train_data_path": "data/UD_English-EWT/train_sample.conllu",
-  //"validation_data_path": "data/UD_English-EWT/test_sample.conllu",
-  //"validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev.conllu",
-  //"validation_data_path": "data/UD_English-EWT/en_ewt-ud-dev-ellided_only.conllu",
+    "train_data_path": std.extVar("TRAIN_DATA_PATH"),
+    "validation_data_path": std.extVar("DEV_DATA_PATH"),
+    //"test_data_path": std.extVar("TEST_DATA_PATH"),
     "model": {
       "type": "enhanced_parser",
-      //"type": "biaffine_parser_original",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {
             "type": "embedding",
-            "embedding_dim": 100
-          }
-        }
+            "embedding_dim": word_embedding_dim,
+            "sparse": true
+           },
+           "token_characters": {
+             "type": "character_encoding",
+             "embedding": {
+               "embedding_dim": char_embedding_dim,
+             },
+             "encoder": {
+               "type": "lstm",
+               "input_size": char_embedding_dim,
+               "hidden_size": char_embedding_dim,
+               "num_layers": 2,
+               "bidirectional": true
+               }
+           }
+        },
       },
       "pos_tag_embedding":{
-        "embedding_dim": 100,
-        "vocab_namespace": "pos_tags"
+        "embedding_dim": pos_embedding_dim,
+        "vocab_namespace": "pos",
+        "sparse": true
       },
       "encoder": {
         "type": "stacked_bidirectional_lstm",
-        "input_size": 200,
-        "hidden_size": 600,
+        "input_size": embedding_dim,
+        "hidden_size": hidden_dim,
         "num_layers": 3,
         "recurrent_dropout_probability": 0.33,
         "use_highway": true
@@ -41,8 +66,8 @@
       "dropout": 0.33,
       "input_dropout": 0.33,
       "initializer": [
-        [".*feedforward.*weight", {"type": "xavier_uniform"}],
-        [".*feedforward.*bias", {"type": "zero"}],
+        [".*projection.*weight", {"type": "xavier_uniform"}],
+        [".*projection.*bias", {"type": "zero"}],
         [".*tag_bilinear.*weight", {"type": "xavier_uniform"}],
         [".*tag_bilinear.*bias", {"type": "zero"}],
         [".*weight_ih.*", {"type": "xavier_uniform"}],
@@ -50,18 +75,19 @@
         [".*bias_ih.*", {"type": "zero"}],
         [".*bias_hh.*", {"type": "lstm_hidden_bias"}]]
     },
-
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["tokens", "num_tokens"]],
-      "batch_size" : 32
+      "batch_size" : batch_size
     },
+    "evaluate_on_test": false,
     "trainer": {
-      "num_epochs": 10,
+      "num_epochs": num_epochs,
       "grad_norm": 5.0,
       "patience": 50,
       "cuda_device": 0,
       "validation_metric": "+labeled_f1",
+      "num_serialized_models_to_keep": 1,
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]

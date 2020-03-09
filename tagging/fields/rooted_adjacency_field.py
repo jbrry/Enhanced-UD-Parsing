@@ -61,8 +61,10 @@ class RootedAdjacencyField(Field[torch.Tensor]):
         self._maybe_warn_for_namespace(label_namespace)
         field_length = len(self.token_sequence)
 
-        if len(set(indices)) != len(indices):
-            raise ConfigurationError(f"Indices must be unique, but found {indices}")
+        # TODO: some words can have the same head twice but with different labels!
+        # so we must remove this check in order to process some treebanks.
+        #if len(set(indices)) != len(indices):
+        #    raise ConfigurationError(f"Indices must be unique, but found {indices}")
 
         if not all(
             0 <= index[1] < field_length and 0 <= index[0] < field_length for index in indices

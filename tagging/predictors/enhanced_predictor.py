@@ -63,15 +63,9 @@ class EnhancedPredictor(Predictor):
                                                  else token
                                                  for label in instance.fields[namespace].labels]
 
-
-
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
         global sentence_index
-        
-        # __main__.UDError: The collapsed CoNLL-U line still contains empty nodes: 8.1	reported	report	VERB	VBN	Tense=Past|VerbForm=Part|Voice=Pass	_	_	5:conj:and	CopyOf=5
-        # need to run: perl enhanced_collapse_empty_nodes.pl enhanced.conllu > collapsed.conllu as per the suggestions here: https://github.com/UniversalDependencies/tools/blob/master/README.txt
-        # The input to the evaluation script should be a version of the gold and system output where empty nodes have been eliminated using the technique described above 
 
         sentence_index += 1
         sent_id = ('# sent_id = ' + str(sentence_index))
@@ -83,15 +77,15 @@ class EnhancedPredictor(Predictor):
         predicted_arc_tags = outputs["arc_tags"]
         
         # changes None to "_"
-        #cleaned_heads = []
-        #predicted_heads = outputs["head_indices"]
-        #for head in predicted_heads:
-        #    if type(head) != int:
-        #        head = "_"
-        #        cleaned_heads.append(head)
-        #    else:
-        #        cleaned_heads.append(head)
-        #outputs["head_indices"] = cleaned_heads
+        cleaned_heads = []
+        predicted_heads = outputs["head_indices"]
+        for head in predicted_heads:
+            if type(head) != int:
+                head = "_"
+                cleaned_heads.append(head)
+            else:
+                cleaned_heads.append(head)
+        outputs["head_indices"] = cleaned_heads
         
                 
         # dictionary mapping original conllu IDs (which contain float-values) to 1-indexed IDs as they appear in the sentence
