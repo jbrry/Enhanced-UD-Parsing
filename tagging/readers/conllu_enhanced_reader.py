@@ -150,14 +150,36 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             logger.info("Reading UD instances from conllu dataset at: %s", file_path)
 
             num_copy_nodes = 0
-                 
+
             for annotation in parse_incr(conllu_file):
+                num_conllu_rows = len(annotation)
+                
+                # store these for now (might need when decoding)
+                multiword_ids = []
+                
+                # filter the conllu sentences for multi-word tokens which don't have any dependency information
+                for i in range(num_conllu_rows):
+                    conllu_id = annotation[i]["id"]
+                    if type(conllu_id) == tuple:
+                        if "-" in conllu_id:
+                            multiword_ids.append(conllu_id)
+                            annotation[i]["id"] = None
+                    else: multiword_ids.append(None)
+                
+                # only include those annotations where the ids aren't None
+                annotation = [x for x in annotation if x["id"] is not None]
+
+                ids = [x["id"] for x in annotation]
+                #multiword_ids = [x["multi_id"] for x in multiword_tokens]
+                
+                # regular case: need to filter out MWTs with no head information but keep elided tokens
                 self.contains_copy_node = False
                 
-                # check for presence of copy nodes
+                # check for presence of copy nodes (at this point, tuples are only elided tokens as MWT have been removed)
                 copy_node = [x for x in annotation if not isinstance(x["id"], int)]
                 if copy_node:
                     self.contains_copy_node = True
+
                     
                     # count number of copy nodes in misc column
                     misc = [x["misc"] for x in annotation]
@@ -167,9 +189,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                             for val in vals:
                                 if "CopyOf" in val:
                                     num_copy_nodes += 1
-                
-                ids = [x["id"] for x in annotation]
-                
+                            
                 # fix tuple IDs e.g. (8, '.', 1) to 8.1
                 if self.contains_copy_node:
                     for index, conllu_id in enumerate(ids):
@@ -178,10 +198,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                             copy_node = str(copy_node[0]) + '.' + str(copy_node[-1])
                             copy_node = float(copy_node)                            
                             ids[index] = copy_node
-                
-                # regular case: only uses regular indices.                   
-                #annotation = [x for x in annotation if isinstance(x["id"], int)]
-                
+                                
                 tokens = [x["form"] for x in annotation]
                 
                 if self.use_language_specific_pos:
@@ -251,6 +268,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         #### enhanced deps
         if deps is not None:
+            #print(tokens)
+            #print(deps)
             enhanced_arc_tags, enhanced_arc_indices, original_to_new_indices = self._convert_deps_to_nested_sequences(ids, deps)
      
             assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
