@@ -8,8 +8,10 @@
 
 # Author: Joachim Wagner
 
+import hashlib
 import os
 import subprocess
+import time
 
 def get_score_stats(scores):
     scores.sort()
@@ -124,4 +126,18 @@ def makedirs(required_dir):
             # between the to calls above
             # (in python 3, we will be able to use exist_ok=True)
             pass
+
+def random_delay(max_seconds = 5.0, min_fraction = 0.0, max_fraction = 1.0):
+    fraction = min_fraction * (max_fraction-min_fraction) * random()
+    time.sleep(max_seconds * fraction)
+
+def random():
+    h = hashlib.sha256()
+    f = open('/dev/urandom', 'rb')
+    h.update(f.read(80))
+    f.close()
+    now = time.time()
+    h.update(b'%.9f' %now)
+    h = int(h.hexdigest(), 16)
+    return h / 2.0**256
 

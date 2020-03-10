@@ -370,6 +370,7 @@ class ElmoCache:
                 print('\t%.1f%% of entries processed (%d of %d)' %(
                     100.0*key_index/n_keys, key_index, n_keys
                 ))
+                sys.stdout.flush()
                 last_verbose = now
             key_index += 1
             entry = self.key2entry[key]
