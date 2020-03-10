@@ -24,7 +24,7 @@ import string
 import sys
 import time
 
-#import utilities
+import utilities
 
 class Options:
 
@@ -248,7 +248,7 @@ class Config_default:
         self.enhanced_parser = None
         if variant is not None:
             self.init_segmenter()
-            self.init_basic_parser()
+            self.init_basic_parsers()
             self.init_enhanced_parser()
 
     def __repr__(self):
@@ -314,40 +314,20 @@ class Config_default:
                 retval.append(module_name)
         return retval
 
-    def init_basic_parser(self):
+    def init_segmenter(self):
+        pass
+
+    def init_basic_parsers(self):
         self.basic_parsers = []
-        parsers = self.variant[1].split(':')
+        parsers = self.variant[1]
         if not parsers:
             print('Warning: No parser found that supports', self.lcode)
         for index in range(self.get_basic_parser_ensemble_size()):
             round_robin_choice = parsers[index % len(parsers)]
             self.basic_parsers.append(round_robin_choice)
 
-    def get_basic_parsers(self, embedding):
-        if embedding == 'contextualised':
-            parsers = self.get_basic_parsers_with_contextualised_embedding()
-        elif embedding == 'external':
-            parsers = self.get_basic_parsers_with_external_embedding()
-        elif embedding == 'internal':
-            parsers = self.get_basic_parsers_with_internal_embedding()
-        else:
-            raise ValueError('Unsupported embedding type %s' %embedding)
-        retval = []
-        # filter for lcode
-        for parser_name in parsers:
-            parser_module = importlib.import_module(parser_name)
-            if parser_module.supports(self.lcode):
-                retval.append(parser_name)
-        return retval
-
-    def get_basic_parsers_with_contextualised_embedding(self):
-        return ['elmo_udpf']
-
-    def get_basic_parsers_with_external_embedding(self):
-        return ['fasttext_udpf']
-
-    def get_basic_parsers_with_internal_embedding(self):
-        return ['plain_udpf']
+    def init_enhanced_parser(self):
+        pass
 
 def main():
     options = Options()

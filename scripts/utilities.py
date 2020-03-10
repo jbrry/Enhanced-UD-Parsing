@@ -141,3 +141,25 @@ def random():
     h = int(h.hexdigest(), 16)
     return h / 2.0**256
 
+def get_language(lcode):
+    project_dir = get_project_dir()
+    retval = None
+    f = open('%s/languages.tsv' %project_dir, 'r')
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        if line.startswith('#'):
+            continue
+        fields = line.split()
+        if fields[0] == lcode:
+            retval = fields[1]
+            break
+    f.close()
+    return retval
+
+def get_project_dir():
+    if 'PRJ_DIR' in os.environ:
+        return os.environ['PRJ_DIR']
+    return os.path.dirname(os.getcwd())
+
