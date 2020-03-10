@@ -47,15 +47,23 @@ Options:
                             data set.
                             (Default: only report development set results)
 
+    --skip-training  NAME   Skip training models for component NAME.
+                            Can be one of segmenter, basic_parser and
+                            enhanced_parser, and can be repeated to skip
+                            training for more than one component.
+                            Specifying a space- or colon-separated list
+                            of components is also supported.
+                            (Default: train all missing models)
+
     --workdir  DIR          Path to working directory
-                            (Default: . = current directory)
+                            (Default: data)
 
     --taskdir  DIR          Path to shared task data containing a UD-like
                             folder structure with training and dev files.
                             With --final-test, we assume that test files
-                            follow the naming and structure of the dev
-                            data and can be merged into the train-dev
-                            folder provided by the shared task.
+                            follow the naming and structure of the dev data
+                            and can be merged into the train-dev folder
+                            provided by the shared task.
                             (Default: workdir + /train-dev)
 
     --modeldir  DIR         Path to model directory
@@ -96,7 +104,8 @@ Options:
 
     def read_options(self):
         self.final_test = False
-        self.workdir    = '.'
+        self.skip_training = set()
+        self.workdir    = 'data'
         self.taskdir    = None
         self.modeldir   = None
         self.predictdir = None
@@ -113,6 +122,10 @@ Options:
                 return True
             elif option == '--final-test':
                 self.final_test = True
+            elif option == '--skip-training':
+                for name in sys.argv[1].replace(':', ' ').split():
+                    self.skip_training.add(name)
+                del sys.argv[1]
             elif option == '--workdir':
                 self.workdir = sys.argv[1]
                 del sys.argv[1]
@@ -151,7 +164,7 @@ Options:
         return False
 
     def get_tasks_and_configs(self):
-        self.tasks = []
+        self.prediction_tasks = []
         self.training_data = []
         self.configs = {}
         for tbname in os.listdir(self.taskdir):
@@ -161,14 +174,20 @@ Options:
                 continue
             # Scan the treebank folder
             tbdir = '/'.join((self.taskdir, tbname))
-            treebank_needs_config = False
-            tbid, lcode = None, None
+            tbid_needs_models = False
+            tbid, lcode, data_type = None, None, None
             for filename in os.listdir(tbdir):
                 path = '/'.join((tbdir, filename))
                 if '-ud-' in filename:
                     tbid, _, suffix = filename.rsplit('-', 2)
-                    lcode = tbid.split('_')[0]
                     data_type = suffix.split('.')[0]
+                if filename == 'tbid.txt':
+                    f = open('%s/%s' %(tbdir, filename), 'r')
+                    tbid = f.readline().strip()
+                    f.close()
+                    tbid_needs_models = True
+                if tbid:
+                    lcode = tbid.split('_')[0]
                     if '-' in tbid:
                         tbid = tbid.replace('-', '_')
                         if self.verbose:
@@ -176,12 +195,12 @@ Options:
                 if filename.endswith('-ud-dev.txt') \
                 or filename.endswith('-ud-test.txt'):
                     # found a prediction task
-                    treebank_needs_config = True
-                    self.tasks.append((path, tbid, lcode, data_type))
+                    tbid_needs_models = True
+                    self.prediction_tasks.append((path, tbid, lcode, data_type))
                 if filename.endswith('-ud-train.conllu'):
                     # found training data
                     self.training_data.append((path, tbid, lcode))
-            if not treebank_needs_config:
+            if not tbid_needs_models:
                 continue
             # Find the most specific config available
             # TODO: Add language family as a layer between
@@ -203,11 +222,21 @@ Options:
             for variant in config_class(tbid, lcode).get_variants():
                 configs_for_tbid.append(config_class(tbid, lcode, variant))
             self.configs[tbid] = configs_for_tbid
-        if opt_debug:
-            print('tasks:', self.tasks)
-            print('training_data:', self.training_data)
-            print('configs:', self.configs)
-    
+        if self.debug:
+            print('prediction_tasks:', len(self.prediction_tasks))
+            for item in sorted(self.prediction_tasks):
+                print('\t', item)
+            print('training_data:', len(self.training_data))
+            for item in sorted(self.training_data):
+                print('\t', item)
+            print('configs:', len(self.configs))
+            for key in sorted(list(self.configs.keys())):
+                items = self.configs[key]
+                print('\t', key, len(items))
+                for item in sorted(items):
+                    print('\t\t', item)
+
+
 class Config_default:
 
     def __init__(self, tbid, lcode, variant = None):
@@ -258,19 +287,32 @@ class Config_default:
     def get_basic_parser_names(self):
         return ['elmo_udpf', 'fasttext_udpf', 'plain_udpf', 'udify']
 
+    def get_enhanced_parser_names(self):
+        return ['enhanced_parser']
+
     def get_basic_parser_ensemble_size(self):
         return 3
 
+    def get_segmenters(self):
+        return self.filter_by_lcode(self.get_segmenter_names())
+
     def get_basic_parsers(self):
-        retval = []
-        for candidate_parser in self.get_basic_parser_names():
-            parser_module = importlib.import_module(candidate_parser)
-            if parser_module.supports(self.lcode):
-                retval.append(candidate_parser)
-        return retval
+        return self.filter_by_lcode(self.get_basic_parser_names())
 
     def get_enhanced_parsers(self):
-        return ['enhanced_parser']
+        return self.filter_by_lcode(self.get_enhanced_parser_names())
+
+    def filter_by_lcode(self, module_names):
+        retval = []
+        for module_name in module_names:
+            try:
+                my_module = importlib.import_module(module_name)
+            except ImportError:
+                print('Warning: module %r not available, skipping' %module_name)
+                continue
+            if my_module.supports(self.lcode):
+                retval.append(module_name)
+        return retval
 
     def init_basic_parser(self):
         self.basic_parsers = []
@@ -280,7 +322,7 @@ class Config_default:
         for index in range(self.get_basic_parser_ensemble_size()):
             round_robin_choice = parsers[index % len(parsers)]
             self.basic_parsers.append(round_robin_choice)
-        
+
     def get_basic_parsers(self, embedding):
         if embedding == 'contextualised':
             parsers = self.get_basic_parsers_with_contextualised_embedding()
