@@ -53,6 +53,8 @@ Options:
                             training for more than one component.
                             Specifying a space- or colon-separated list
                             of components is also supported.
+                            Skipping can be restricted to a subcompontent
+                            with a dot, e.g. "basic_parser.plain_udpf".
                             (Default: train all missing models)
 
     --workdir  DIR          Path to working directory
@@ -236,6 +238,11 @@ Options:
                 for item in sorted(items):
                     print('\t\t', item)
 
+    def train_missing_models(self):
+        for tbid in self.configs:
+            for config in self.configs[tbid]:
+                if not config.skip(self.skip_training):
+                    config.train_missing_models()
 
 class Config_default:
 
@@ -266,6 +273,10 @@ class Config_default:
         return True
 
     def get_variants(self):
+        # TODO: need a way to get variants that use the same module for
+        #       a component but different training data, e.g.
+        #       udpipe_standard with english-ewt and
+        #       udpipe_standard with english-gum
         basic_parser_ensemble_size = self.get_basic_parser_ensemble_size()
         for segmenter in self.get_segmenters():
             basic_parsers = list(self.get_basic_parsers())
@@ -329,9 +340,56 @@ class Config_default:
     def init_enhanced_parser(self):
         pass
 
+    def skip(self, skip_list):
+        segmenter, basic_parsers, enhanced_parser = self.variant
+        if self.p_skip('segmenter', segmenter, skip_list):
+            return True
+        for basic_parser in basic_parsers:
+            if self.p_skip('basic_parser', basic_parser, skip_list):
+                return True
+        if self.p_skip('enhanced_parser', enhanced_parser, skip_list):
+            return True
+        return False
+
+    def p_skip(self, category, module_name, skip_list):
+        if category in skip_list:
+            return True
+        combined_name = '.'.join((category, module_name))
+        if combined_name in skip_list:
+            return True
+        return False
+
+    def train_missing_models(self):
+        self.train_missing_segmenter_model()
+        self.train_missing_basic_parser_models()
+        self.train_missing_enhanced_parser_model()
+
+    def train_missing_segmenter_model():
+        segmenter = importlib.import_module(self.variant[0])
+        segmenter.train_model_if_missing(
+            self.lcode,
+            self.init_seed,
+        )
+
+    def train_missing_basic_parser_models():
+        for p_index, p_name in enumerate(self.variant[1]):
+            basic_parser = importlib.import_module(p_name)
+            basic_parser.train_model_if_missing(
+                self.lcode,
+                '%s%02d' %(self.init_seed, p_index),
+            )
+
+    def train_missing_enhanced_parser_model():
+        enhanced_parser = importlib.import_module(self.variant[2])
+        enhanced_parser.train_model_if_missing(
+            self.lcode,
+            self.init_seed,
+        )
+
 def main():
     options = Options()
     options.get_tasks_and_configs()
+    options.train_missing_models()
 
 if __name__ == "__main__":
     main()
