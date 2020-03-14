@@ -5,8 +5,9 @@ import codecs
 """
 Reads a regular CoNLLU file and performs various utilities.
 
-Example usage: 
-    python utils/gather_ellided_sentences.py -i data/UD_English-EWT/en_ewt-ud-train.conllu -o data-filtered/UD_English-EWT/
+Example usage:
+      prep new data dir: cp -r data/train-dev/ data/train-dev-filtered/
+      replace original file with filtered version: python utils/conllu_file_utilities.py -i data/train-dev/UD_Czech-CAC/cs_cac-ud-train.conllu -o data/train-dev-filtered/UD_Czech-CAC/ -m max-len -c 197
 """
 
 parser = argparse.ArgumentParser(description='File utils')
