@@ -3,15 +3,17 @@ import os
 import codecs
 
 """
-Reads a regular CoNLLU file and writes only those sentences which contain ellided tokens to an output file.
+Reads a regular CoNLLU file and performs various utilities.
 
 Example usage: 
-    python utils/gather_ellided_sentences.py -i data/UD_English-EWT/en_ewt-ud-train.conllu -o data/UD_English-EWT/
+    python utils/gather_ellided_sentences.py -i data/UD_English-EWT/en_ewt-ud-train.conllu -o data-filtered/UD_English-EWT/
 """
 
 parser = argparse.ArgumentParser(description='File utils')
 parser.add_argument('--input', '-i', type=str, help='Input CoNLLU file.')
 parser.add_argument('--outdir','-o', type=str, help='Directory to write out files to.')
+parser.add_argument('--mode', '-m', type=str, default='utf-8', help='The behaviour to filter sentences by: elided, max-len.')
+parser.add_argument('--cutoff', '-c', type=int, default='utf-8', help='The cutoff value for the maximum length of senences if using mode max-len.')
 parser.add_argument('--encoding', '-e', type=str, default='utf-8', help='Type of encoding.')
 args = parser.parse_args()
 
@@ -32,6 +34,7 @@ def conllu_reader(infile):
     current_tokens=[]
     sent_count=0
     token_counts=0
+    max_sentence_len = 0
 
     while True:
         line = file.readline()
@@ -43,6 +46,8 @@ def conllu_reader(infile):
             sentences.append(current_sentence)
             # update token/sentence counts
             tokens_per_sent = len(current_tokens)
+            if tokens_per_sent > max_sentence_len:
+                max_sentence_len = tokens_per_sent              
             token_counts += tokens_per_sent
             sent_count += 1
             # clear the lists for the next conllu sentence
@@ -60,6 +65,7 @@ def conllu_reader(infile):
     file.close()
     assert len(sentences) == sent_count
     print("Found {} sentences and {} tokens".format(sent_count, token_counts))
+    print("Longest sentece = {} words".format(max_sentence_len))
     return sentences, token_counts, sent_count
 
 
@@ -73,29 +79,50 @@ def write_conllu(data, outfile):
                     f.write(entry)
             f.write('\n')
 
+# metadata
 in_name = os.path.basename(args.input)
 file_string = in_name.split('.')[0]
 tbid = file_string.split('-')[0]
 file_type = file_string.split('-')[-1]
-out_file_string = (f"{tbid}-ud-{file_type}-ellided_only.conllu")
-out_file = os.path.join(args.outdir, out_file_string) 
 
 # gather sentences from file
 sentences, token_counts, sent_count = conllu_reader(args.input)
 
-# empty list to collect sentences with ellided tokens
-sents_containing_ellided_tokens = []
-num_sents_with_ellided_tokens = 0
 
-for sent in sentences:
-    for conllu_row in sent:
-        # check for copy node (ellided token)
-        if "CopyOf" in conllu_row:
-            if sent not in sents_containing_ellided_tokens:
-                sents_containing_ellided_tokens.append(sent)
-                num_sents_with_ellided_tokens += 1
+# filter sentences by max length
+if args.mode == "max-len":
+    processed_sentences = []
+    num_sents_below_cutoff = 0
+    
+    for sent in sentences:
+        if len(sent) > args.cutoff:
+            continue
+        else:
+            processed_sentences.append(sent)
+            num_sents_below_cutoff += 1
+    
+    out_file_string = (f"{tbid}-ud-{file_type}.conllu")
+    
+    print("Out of {} sentences, {} remain after filtering by length".format(sent_count, num_sents_below_cutoff))
 
-print("Out of {} sentences, {} contain copy nodes".format(sent_count, num_sents_with_ellided_tokens))
+# keep only sentences with elided tokens
+elif args.mode == "elided":
+    # empty list to collect sentences with ellided tokens
+    processed_sentences = []
+    num_sents_with_ellided_tokens = 0
+    
+    for sent in sentences:
+        for conllu_row in sent:
+            # check for copy node (ellided token)
+            if "CopyOf" in conllu_row:
+                if sent not in processed_sentences:
+                    processed_sentences.append(sent)
+                    num_sents_with_ellided_tokens += 1
+                    
+    out_file_string = (f"{tbid}-ud-{file_type}-ellided_only.conllu")                
+    print("Out of {} sentences, {} contain copy nodes".format(sent_count, num_sents_with_ellided_tokens))
+
+
+out_file = os.path.join(args.outdir, out_file_string)
 print("Writing output to {}".format(out_file))
-
-ellided_out = write_conllu(sents_containing_ellided_tokens, out_file)
+conllu_out = write_conllu(processed_sentences, out_file)
