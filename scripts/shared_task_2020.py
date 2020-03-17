@@ -169,6 +169,7 @@ Options:
         self.prediction_tasks = []
         self.training_data = []
         self.configs = {}
+        prepare_configs = []
         for tbname in os.listdir(self.taskdir):
             if not tbname.startswith('UD_'):
                 if self.verbose:
@@ -219,6 +220,9 @@ Options:
                     pass
             if config_class is None:
                 raise ValueError('No config found in %r' %(globals().keys()))
+            # postpone config creation to when all folders have been read
+            prepare_configs.append((tbid, lcode, config_class))
+        for tbid, lcode, config_class in prepare_configs:
             if tbid in self.configs:
                 print('Warning: duplicate TBID', tbid)
             # create all config variants for this tbid
@@ -226,7 +230,7 @@ Options:
             # test set and config variant)
             configs_for_tbid = []
             for variant in config_class(tbid, lcode).get_variants():
-                configs_for_tbid.append(config_class(tbid, lcode, variant))
+                configs_for_tbid.append(config_class(tbid, lcode, variant, self.training_data))
             self.configs[tbid] = configs_for_tbid
         if self.debug:
             print('prediction_tasks:', len(self.prediction_tasks))
@@ -255,10 +259,11 @@ Options:
 
 class Config_default:
 
-    def __init__(self, tbid, lcode, variant = None):
+    def __init__(self, tbid, lcode, variant = None, task_training_data = None):
         self.tbid = tbid
         self.lcode = lcode
         self.variant = variant
+        self.task_training_data = task_training_data
         self.segmenter = None
         self.basic_parsers = []
         self.enhanced_parser = None
@@ -315,26 +320,79 @@ class Config_default:
         return 3
 
     def get_segmenters(self):
-        return self.filter_by_lcode(self.get_segmenter_names())
+        return self.filter_by_lcode_and_add_datasets(
+            self.get_segmenter_names()
+        )
 
     def get_basic_parsers(self):
-        return self.filter_by_lcode(self.get_basic_parser_names())
+        return self.filter_by_lcode_and_add_datasets(
+            self.get_basic_parser_names()
+        )
 
     def get_enhanced_parsers(self):
-        return self.filter_by_lcode(self.get_enhanced_parser_names())
+        return self.filter_by_lcode_and_add_datasets(
+            self.get_enhanced_parser_names()
+        )
 
-    def filter_by_lcode(self, module_names):
+    def filter_by_lcode_and_add_datasets(self, module_names):
+        datasets = list(self.get_dataset_names())
         retval = []
-        for module_details in module_names:
-            module_name = module_details.split(':')[0]
+        for module_name in module_names:
             try:
                 my_module = importlib.import_module(module_name)
             except ImportError:
                 print('Warning: module %r not available, skipping' %module_name)
                 continue
-            if my_module.supports(self.lcode):
-                retval.append(module_details)
+            if my_module.supports_lcode(self.lcode):
+                if not datasets:
+                    if my_module.has_default_model_for_lcode(self.lcode):
+                        retval.append(module_name)
+                else:
+                    # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
+                    n_datasets = len(datasets)
+                    for combination_index in range(1, 1 << n_datasets):
+                        combination = [datasets[j]
+                            for j in range(n_datasets)
+                            if (combination_index & (1 << j))
+                        ]
+                        contains_ud25_data = False
+                        contains_task_data = False
+                        first_lcode = combination[0][5:7]
+                        contains_target_lcode = False
+                        data_lcodes = set()
+                        for dataset_name in combination:
+                            if dataset_name.startswith('ud25.'):
+                                contains_ud25_data = True
+                            if dataset_name.startswith('task.'):
+                                contains_task_data = True
+                            lcode = dataset_name[5:7]
+                            if lcode == self.lcode:
+                                contains_target_lcode = True
+                            data_lcodes.add(lcode)
+                        if not contains_target_lcode:
+                            # dataset combination has no data with the
+                            # target lcode --> skip
+                            continue
+                        is_polyglot = len(data_lcodes) > 1
+                        #if is_polyglot:
+                        #    TODO: do we want to check that all languages are supported,
+                        #          e.g. word embeddings are available, or do we assume
+                        #          that modules that support polyglot training use internal
+                        #          word embeddings only?
+                        if len(combination) == 1 \
+                        and contains_ud25_data   \
+                        and my_module.has_ud25_model_for_tbid(combination[0][5:]):
+                            retval.append(':'.join((module_name, combination[0])))
+                        elif my_module.can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
+                            retval.append(':'.join((module_name, '+'.join(combination))))
         return retval
+
+    def get_dataset_names(self):
+        ''' subclasses should extend this list to include
+            appropriate ud25 data
+        '''
+        for x in self.task_training_data:
+            raise NotImplementedError
 
     def init_segmenter(self):
         self.segmenter = self.variant[0]
@@ -400,11 +458,9 @@ class Config_default:
 
 class Config_cs(Config_default):
 
-    def get_segmenter_names(self):
-        return Config_default.get_segmenter_names(self) + [
-            'udpipe_standard:cs_cac',
-            'udpipe_standard:cs_pdf',
-        ]
+    def get_dataset_names(self):
+        return ('ud.cs_cac', 'ud.cs_pdt')
+
 
 def main():
     options = Options()
