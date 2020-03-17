@@ -106,7 +106,7 @@ Options:
 
     def read_options(self):
         self.final_test = False
-        self.skip_training = set()
+        self.modules_not_to_train = set()
         self.workdir    = 'data'
         self.taskdir    = None
         self.modeldir   = None
@@ -126,7 +126,7 @@ Options:
                 self.final_test = True
             elif option == '--skip-training':
                 for name in sys.argv[1].replace(':', ' ').split():
-                    self.skip_training.add(name)
+                    self.modules_not_to_train.add(name)
                 del sys.argv[1]
             elif option == '--workdir':
                 self.workdir = sys.argv[1]
@@ -202,6 +202,8 @@ Options:
                 if filename.endswith('-ud-train.conllu'):
                     # found training data
                     self.training_data.append((path, tbid, lcode))
+            if tbid is None:
+                print('Warning: No TBID found for %s. Please add `tbid.txt`.' %tbname)
             if not tbid_needs_models:
                 continue
             # Find the most specific config available
@@ -220,6 +222,8 @@ Options:
             if tbid in self.configs:
                 print('Warning: duplicate TBID', tbid)
             # create all config variants for this tbid
+            # (we will produce exactly one prediction for each
+            # test set and config variant)
             configs_for_tbid = []
             for variant in config_class(tbid, lcode).get_variants():
                 configs_for_tbid.append(config_class(tbid, lcode, variant))
@@ -241,8 +245,13 @@ Options:
     def train_missing_models(self):
         for tbid in self.configs:
             for config in self.configs[tbid]:
-                if not config.skip(self.skip_training):
+                if not config.is_operational():
+                    print('Not training %r as it is not operational' %config)
+                    continue
+                if not config.skip(self.modules_not_to_train):
                     config.train_missing_models()
+                else:
+                    print('Not training %r as user requested to slik it' %config)
 
 class Config_default:
 
@@ -273,7 +282,8 @@ class Config_default:
         return True
 
     def get_variants(self):
-        # TODO: need a way to get variants that use the same module for
+        # Sub-classes can add parameters to the module name separated by a
+        # colon (':'), e.g. to get variants that use the same module for
         #       a component but different training data, e.g.
         #       udpipe_standard with english-ewt and
         #       udpipe_standard with english-gum
@@ -315,18 +325,19 @@ class Config_default:
 
     def filter_by_lcode(self, module_names):
         retval = []
-        for module_name in module_names:
+        for module_details in module_names:
+            module_name = module_details.split(':')[0]
             try:
                 my_module = importlib.import_module(module_name)
             except ImportError:
                 print('Warning: module %r not available, skipping' %module_name)
                 continue
             if my_module.supports(self.lcode):
-                retval.append(module_name)
+                retval.append(module_details)
         return retval
 
     def init_segmenter(self):
-        pass
+        self.segmenter = self.variant[0]
 
     def init_basic_parsers(self):
         self.basic_parsers = []
@@ -338,7 +349,7 @@ class Config_default:
             self.basic_parsers.append(round_robin_choice)
 
     def init_enhanced_parser(self):
-        pass
+        self.enhanced_parser = self.variant[2]
 
     def skip(self, skip_list):
         segmenter, basic_parsers, enhanced_parser = self.variant
@@ -360,18 +371,19 @@ class Config_default:
         return False
 
     def train_missing_models(self):
-        self.train_missing_segmenter_model()
-        self.train_missing_basic_parser_models()
-        self.train_missing_enhanced_parser_model()
+        tasks = self.train_missing_segmenter_model()
+        tasks += self.train_missing_basic_parser_models()
+        tasks += self.train_missing_enhanced_parser_model()
+        tasks.wait_for_tasks(tasks)
 
-    def train_missing_segmenter_model():
+    def train_missing_segmenter_model(self):
         segmenter = importlib.import_module(self.variant[0])
         segmenter.train_model_if_missing(
             self.lcode,
             self.init_seed,
         )
 
-    def train_missing_basic_parser_models():
+    def train_missing_basic_parser_models(self):
         for p_index, p_name in enumerate(self.variant[1]):
             basic_parser = importlib.import_module(p_name)
             basic_parser.train_model_if_missing(
@@ -379,12 +391,20 @@ class Config_default:
                 '%s%02d' %(self.init_seed, p_index),
             )
 
-    def train_missing_enhanced_parser_model():
+    def train_missing_enhanced_parser_model(self):
         enhanced_parser = importlib.import_module(self.variant[2])
         enhanced_parser.train_model_if_missing(
             self.lcode,
             self.init_seed,
         )
+
+class Config_cs(Config_default):
+
+    def get_segmenter_names(self):
+        return Config_default.get_segmenter_names(self) + [
+            'udpipe_standard:cs_cac',
+            'udpipe_standard:cs_pdf',
+        ]
 
 def main():
     options = Options()
