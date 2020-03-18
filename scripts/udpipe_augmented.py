@@ -20,6 +20,12 @@ import sys
 import common_udpipe_future
 import utilities
 
-def supports(lcode):
+def supports_lcode(lcode):
+    return False
+
+def can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
+    return not is_polyglot
+
+def has_ud25_model_for_tbid(tbid):
     return False
 

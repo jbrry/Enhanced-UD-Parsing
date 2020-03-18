@@ -207,6 +207,13 @@ Options:
                 print('Warning: No TBID found for %s. Please add `tbid.txt`.' %tbname)
             if not tbid_needs_models:
                 continue
+            # postpone config creation to when all folders have been read
+            prepare_configs.append((tbid, lcode))
+        for tbid, lcode in prepare_configs:
+            if tbid in self.configs:
+                print('Warning: Skipping duplicate TBID', tbid)
+            if self.debug:
+                print('Preparing configurations for TBID', tbid)
             # Find the most specific config available
             # TODO: Add language family as a layer between
             #       lcode and default.
@@ -220,16 +227,18 @@ Options:
                     pass
             if config_class is None:
                 raise ValueError('No config found in %r' %(globals().keys()))
-            # postpone config creation to when all folders have been read
-            prepare_configs.append((tbid, lcode, config_class))
-        for tbid, lcode, config_class in prepare_configs:
-            if tbid in self.configs:
-                print('Warning: duplicate TBID', tbid)
             # create all config variants for this tbid
             # (we will produce exactly one prediction for each
             # test set and config variant)
+            config_variants = config_class(
+                tbid, lcode,
+                task_training_data = self.training_data,
+                debug = self.debug,
+            ).get_variants()
             configs_for_tbid = []
-            for variant in config_class(tbid, lcode).get_variants():
+            for variant in config_variants:
+                if self.debug:
+                    print('Preparing variant %s for TBID %s' %(variant, tbid))
                 configs_for_tbid.append(config_class(tbid, lcode, variant, self.training_data))
             self.configs[tbid] = configs_for_tbid
         if self.debug:
@@ -259,11 +268,12 @@ Options:
 
 class Config_default:
 
-    def __init__(self, tbid, lcode, variant = None, task_training_data = None):
+    def __init__(self, tbid, lcode, variant = None, task_training_data = None, debug = False):
         self.tbid = tbid
         self.lcode = lcode
         self.variant = variant
         self.task_training_data = task_training_data
+        self.debug = debug
         self.segmenter = None
         self.basic_parsers = []
         self.enhanced_parser = None
@@ -297,6 +307,7 @@ class Config_default:
             basic_parsers = list(self.get_basic_parsers())
             # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
             n_basic_parsers = len(basic_parsers)
+            assert n_basic_parsers < 10
             for combination_index in range(1, 1 << n_basic_parsers):
                 combination = [basic_parsers[j]
                     for j in range(n_basic_parsers)
@@ -320,30 +331,47 @@ class Config_default:
         return 3
 
     def get_segmenters(self):
+        if self.debug:
+            print('Segmenters for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
             self.get_segmenter_names()
         )
 
     def get_basic_parsers(self):
+        if self.debug:
+            print('Basic parsers for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
             self.get_basic_parser_names()
         )
 
     def get_enhanced_parsers(self):
+        if self.debug:
+            print('Enhanced parsers for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
             self.get_enhanced_parser_names()
         )
 
     def filter_by_lcode_and_add_datasets(self, module_names):
+        if self.debug:
+            print('\tQuerying datasets for', self.tbid)
+            sys.stdout.flush()
         datasets = list(self.get_dataset_names())
+        datasets.sort()
+        if self.debug:
+            print('\t-->', datasets)
         retval = []
         for module_name in module_names:
+            if self.debug:
+                print('\t\tImporting', module_name)
+                sys.stdout.flush()
             try:
                 my_module = importlib.import_module(module_name)
             except ImportError:
                 print('Warning: module %r not available, skipping' %module_name)
                 continue
             if my_module.supports_lcode(self.lcode):
+                if self.debug:
+                    print('\t\tLanguage %s is supported' %self.lcode)
                 if not datasets:
                     if my_module.has_default_model_for_lcode(self.lcode):
                         retval.append(module_name)
@@ -355,6 +383,8 @@ class Config_default:
                             for j in range(n_datasets)
                             if (combination_index & (1 << j))
                         ]
+                        if self.debug:
+                            print('\t\t\tChecking dataset combination', combination)
                         contains_ud25_data = False
                         contains_task_data = False
                         first_lcode = combination[0][5:7]
@@ -385,14 +415,21 @@ class Config_default:
                             retval.append(':'.join((module_name, combination[0])))
                         elif my_module.can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
                             retval.append(':'.join((module_name, '+'.join(combination))))
+            elif self.debug:
+                print('\t\tLanguage %s is not supported' %self.lcode)
+        if self.debug:
+            print('\tFinished checking modules for', self.tbid)
+            print('\t-->', retval)
+            sys.stdout.flush()
         return retval
 
     def get_dataset_names(self):
         ''' subclasses should extend this list to include
             appropriate ud25 data
         '''
-        for x in self.task_training_data:
-            raise NotImplementedError
+        for path, tbid, lcode in self.task_training_data:
+            if lcode == self.lcode:
+                yield 'task.' + tbid
 
     def init_segmenter(self):
         self.segmenter = self.variant[0]
@@ -459,8 +496,15 @@ class Config_default:
 class Config_cs(Config_default):
 
     def get_dataset_names(self):
-        return ('ud.cs_cac', 'ud.cs_pdt')
-
+        tbids_covered = set()
+        for dataset in Config_default.get_dataset_names(self):
+            if dataset.startswith('task.'):
+                tbid = dataset.split('.')[1]
+                tbids_covered.add(tbid)
+                yield dataset
+        for tbid in ('cs_cac', 'cs_pdt'):
+            if tbid not in tbids_covered:
+                yield 'ud25.' + tbid
 
 def main():
     options = Options()

@@ -17,8 +17,14 @@ import os
 import subprocess
 import sys
 
-def supports(lcode):
+def supports_lcode(lcode):
     # This parser supports any language for which the user
     # has training data.
     return True
+
+def can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
+    return not contains_ud25_data
+
+def has_ud25_model_for_tbid(tbid):
+    return False
 

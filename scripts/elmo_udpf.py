@@ -40,13 +40,19 @@ except:
 import common_udpipe_future
 import fasttext_udpf
 
-def supports(lcode):
-    if not fasttext_udpf.supports(lcode):
+def supports_lcode(lcode):
+    if not fasttext_udpf.supports_lcode(lcode):
         return False
     return os.path.exists('%s/%s_model' %(
         os.environ['EFML_MODEL_DIR'],
         lcode,
     )) 
+
+def can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
+    return not is_polyglot
+
+def has_ud25_model_for_tbid(tbid):
+    return False
 
 def request_npz(conllu_filename, npz_filename, priority = 50):
     task = ElmoNpzTask(

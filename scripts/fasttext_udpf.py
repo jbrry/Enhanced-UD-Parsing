@@ -19,11 +19,17 @@ import sys
 
 import common_udpipe_future
 
-def supports(lcode):
+def supports_lcode(lcode):
     return os.path.exists('%s/fasttext-%s.npz' %(
         os.environ['FASTTEXT_NPZ_DIR'], 
         lcode,
     ))
+
+def can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
+    return not is_polyglot
+
+def has_ud25_model_for_tbid(tbid):
+    return False
 
 def train(
     dataset_filename, seed, model_dir,
