@@ -33,6 +33,26 @@ def has_ud25_model_for_tbid(tbid):
 def has_task_model_for_tbid(tbid):
     return False
 
+def train_model_if_missing(lcode, init_seed, datasets, model_basedir, temp_basedir, max_tr_tokens = 27000111):
+    p_datasets = datasets
+    datasets = datasets.split('+')
+    n_datasets = len(datasets)
+    assert n_datasets > 0
+    model_dir = utilities.get_model_dir('plain_udpf', lcode, init_seed, datasets, n_datasets, model_basedir)
+    if os.path.exists(model_dir):
+        return None
+    tr_data_filename, n_tokens = utilities.get_concat_filename_and_size(datasets, n_datasets, temp_basedir)
+    epochs = 60
+    while epochs * n_tokens > max_tr_tokens:
+        epochs -= 1
+    return train(
+        tr_data_filename, init_seed, model_dir,
+        epochs = max(6, epochs),
+        priority = 20,
+        is_multi_treebank = n_datasets > 1,
+        submit_and_return = True,
+    )
+
 def train(
     dataset_filename, seed, model_dir,
     epoch_selection_dataset = None,
@@ -61,7 +81,7 @@ def train(
             command.append(monitoring_datasets[i].filename)
     task = common_udpipe_future.run_command(
         command,
-        priority = priority,
+        priority = 200+priority,
         submit_and_return = submit_and_return,
     )
     if submit_and_return:
@@ -105,7 +125,7 @@ def predict(
     task = common_udpipe_future.run_command(
         command,
         requires = requires,
-        priority = priority,
+        priority = 100+priority,
         submit_and_return = submit_and_return,
     )
     if submit_and_return:
