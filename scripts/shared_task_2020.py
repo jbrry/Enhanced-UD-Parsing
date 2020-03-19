@@ -79,8 +79,8 @@ Options:
                             Will be passed to parser for training with a
                             2-digit suffix. If, for example, the parser can
                             only accepts seeds up to 32767 this seed must
-                            not exceed 326 if more than 67 models per
-                            treebank are trained or 327 otherwise.
+                            not exceed 327, assuming no more than 67 models
+                            per treebank are trained, or 326 otherwise.
                             (Default: 42)
 
     --verbose               More detailed log output
@@ -209,9 +209,11 @@ Options:
                 continue
             # postpone config creation to when all folders have been read
             prepare_configs.append((tbid, lcode))
+        prepare_configs.sort()
         for tbid, lcode in prepare_configs:
             if tbid in self.configs:
                 print('Warning: Skipping duplicate TBID', tbid)
+                continue
             if self.debug:
                 print('Preparing configurations for TBID', tbid)
             # Find the most specific config available
@@ -239,7 +241,13 @@ Options:
             for variant in config_variants:
                 if self.debug:
                     print('Preparing variant %s for TBID %s' %(variant, tbid))
-                configs_for_tbid.append(config_class(tbid, lcode, variant, self.training_data))
+                configs_for_tbid.append(config_class(
+                    tbid, lcode,
+                    variant = variant,
+                    task_training_data = self.training_data,
+                    init_seed = self.init_seed,
+                    debug = self.debug,
+                ))
             self.configs[tbid] = configs_for_tbid
         if self.debug:
             print('prediction_tasks:', len(self.prediction_tasks))
@@ -256,23 +264,30 @@ Options:
                     print('\t\t', item)
 
     def train_missing_models(self):
-        for tbid in self.configs:
+        tasks = []
+        for tbid in sorted(list(self.configs.keys())):
             for config in self.configs[tbid]:
                 if not config.is_operational():
                     print('Not training %r as it is not operational' %config)
                     continue
                 if not config.skip(self.modules_not_to_train):
-                    config.train_missing_models()
+                    tasks += config.train_missing_models()
                 else:
-                    print('Not training %r as user requested to slik it' %config)
+                    print('Not training %r as user requested to skip it' %config)
+        utilities.wait_for_tasks(tasks)
 
 class Config_default:
 
-    def __init__(self, tbid, lcode, variant = None, task_training_data = None, debug = False):
+    def __init__(self, tbid, lcode,
+        variant = None, task_training_data = None,
+        debug = False,
+        init_seed = '101',
+    ):
         self.tbid = tbid
         self.lcode = lcode
         self.variant = variant
         self.task_training_data = task_training_data
+        self.init_seed = init_seed
         self.debug = debug
         self.segmenter = None
         self.basic_parsers = []
@@ -322,7 +337,7 @@ class Config_default:
                     for i in range(n_basic_parsers):
                         combination_indices.append(1<<i)
             else:
-                combination_indices = range(1, 1 << n_basic_parsers)    
+                combination_indices = range(1, 1 << n_basic_parsers)
             for combination_index in combination_indices:
                 combination = [basic_parsers[j]
                     for j in range(n_basic_parsers)
@@ -409,7 +424,7 @@ class Config_default:
                         ]
                         if self.debug:
                             print('\t\t\tChecking dataset combination', combination)
-                        
+
                         contains_ud25_data = False
                         contains_task_data = False
                         _, first_tbid = combination[0].split('.', 1)
@@ -547,16 +562,21 @@ class Config_default:
         tasks = self.train_missing_segmenter_model()
         tasks += self.train_missing_basic_parser_models()
         tasks += self.train_missing_enhanced_parser_model()
-        tasks.wait_for_tasks(tasks)
+        return tasks
 
     def train_missing_segmenter_model(self):
         segmenter_module, datasets = self.variant[0].split(':', 1)
         segmenter = importlib.import_module(segmenter_module)
+        if self.debug:
+            print('Training %s with seed %s and data %s' %(
+                segmenter_module, self.init_seed, datasets,
+            ))
         tasks = []
         tasks.append(segmenter.train_model_if_missing(
             self.lcode,
             self.init_seed,
             datasets,
+
         ))
         return tasks
 
@@ -565,15 +585,24 @@ class Config_default:
         for p_index, p_name in enumerate(self.variant[1]):
             p_module_name, datasets = p_name.split(':', 1)
             basic_parser = importlib.import_module(p_module_name)
+            init_seed = '%s%02d' %(self.init_seed, p_index)
+            if self.debug:
+                print('Training %s with seed %s and data %s' %(
+                    p_module_name, init_seed, datasets,
+                ))
             tasks.append(basic_parser.train_model_if_missing(
                 self.lcode,
-                '%s%02d' %(self.init_seed, p_index),
+                init_seed,
                 datasets,
             ))
 
     def train_missing_enhanced_parser_model(self):
         enhanced_module, datasets = self.variant[2].split(':', 1)
         enhanced_parser = importlib.import_module(enhanced_module)
+        if self.debug:
+            print('Training %s with seed %s and data %s' %(
+                enhanced_module, self.init_seed, datasets,
+            ))
         enhanced_parser.train_model_if_missing(
             self.lcode,
             self.init_seed,
