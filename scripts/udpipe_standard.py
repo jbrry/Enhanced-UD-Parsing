@@ -42,6 +42,10 @@ def has_ud25_model_for_tbid(tbid):
     lcode = tbid.split('_')[0]
     return supports_lcode(lcode, tbid)
 
+def has_task_model_for_tbid(tbid):
+    lcode = tbid.split('_')[0]
+    return supports_lcode(lcode, tbid)
+
 def get_udpipe_dir():
     if 'UDPIPE_DIR' in os.environ:
         return os.environ['UDPIPE_DIR']

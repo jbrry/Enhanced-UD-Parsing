@@ -307,13 +307,30 @@ class Config_default:
             basic_parsers = list(self.get_basic_parsers())
             # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
             n_basic_parsers = len(basic_parsers)
-            assert n_basic_parsers < 10
-            for combination_index in range(1, 1 << n_basic_parsers):
+            restrict_to_one = False
+            if n_basic_parsers > 1:
+                # TODO: prune list of parser to k-best parsers according to dev results
+                found_dev_results = False
+                if found_dev_results:
+                    raise NotImplementedError
+                else:
+                    print('Too many parsers. Two pass mode needed.')
+                    print('Individual parsers will be evaluated now.')
+                    print('Then run again to test combinations of the best parsers.')
+                    restrict_to_one = True
+                    combination_indices = []
+                    for i in range(n_basic_parsers):
+                        combination_indices.append(1<<i)
+            else:
+                combination_indices = range(1, 1 << n_basic_parsers)    
+            for combination_index in combination_indices:
                 combination = [basic_parsers[j]
                     for j in range(n_basic_parsers)
                     if (combination_index & (1 << j))
                 ]
                 if len(combination) > basic_parser_ensemble_size:
+                    continue
+                if restrict_to_one and len(combination) > 1:
                     continue
                 for enhanced_parser in self.get_enhanced_parsers():
                     yield (segmenter, combination, enhanced_parser)
@@ -374,8 +391,15 @@ class Config_default:
                     print('\t\tLanguage %s is supported' %self.lcode)
                 if not datasets:
                     if my_module.has_default_model_for_lcode(self.lcode):
-                        retval.append(module_name)
+                        retval.append((0, module_name))
                 else:
+                    tbid_combinations_covered = {}
+                    all_tbids = set()
+                    # find number of tbids
+                    for dataset in datasets:
+                        _, tbid = dataset.split('.', 1)
+                        all_tbids.add(tbid)
+                    n_all_tbids = len(all_tbids)
                     # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
                     n_datasets = len(datasets)
                     for combination_index in range(1, 1 << n_datasets):
@@ -385,23 +409,41 @@ class Config_default:
                         ]
                         if self.debug:
                             print('\t\t\tChecking dataset combination', combination)
+                        
                         contains_ud25_data = False
                         contains_task_data = False
-                        first_lcode = combination[0][5:7]
+                        _, first_tbid = combination[0].split('.', 1)
+                        first_lcode = first_tbid.split('_')[0]
                         contains_target_lcode = False
+                        duplicate_tbid = False
                         data_lcodes = set()
+                        data_tbids = set()
                         for dataset_name in combination:
                             if dataset_name.startswith('ud25.'):
                                 contains_ud25_data = True
                             if dataset_name.startswith('task.'):
                                 contains_task_data = True
-                            lcode = dataset_name[5:7]
+                            data_source, tbid = dataset_name.split('.', 1)
+                            lcode = tbid.split('_')[0]
                             if lcode == self.lcode:
                                 contains_target_lcode = True
+                            if tbid in data_tbids:
+                                duplicate_tbid = True
                             data_lcodes.add(lcode)
+                            data_tbids.add(tbid)
+                        prio1 = len(data_tbids)
+                        prio2 = n_all_tbids - prio1
+                        priority = min(2*prio1-1, 2*prio2)
+                        if duplicate_tbid:
+                            if self.debug:
+                                print('\t\t\t--> duplicate tbid, skipping')
+                            continue
+                        tbid_combi = tuple(sorted(data_tbids))
                         if not contains_target_lcode:
                             # dataset combination has no data with the
                             # target lcode --> skip
+                            if self.debug:
+                                print('\t\t\t--> no matching lcode, skipping')
                             continue
                         is_polyglot = len(data_lcodes) > 1
                         #if is_polyglot:
@@ -412,11 +454,47 @@ class Config_default:
                         if len(combination) == 1 \
                         and contains_ud25_data   \
                         and my_module.has_ud25_model_for_tbid(combination[0][5:]):
-                            retval.append(':'.join((module_name, combination[0])))
+                            if tbid_combi in tbid_combinations_covered:
+                                if self.debug:
+                                    print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
+                            else:
+                                retval.append((priority, ':'.join((module_name, combination[0]))))
+                                tbid_combinations_covered[tbid_combi] = combination
+                                if self.debug:
+                                    print('\t\t\t--> added data as module has a ud25 model ready')
+                        if len(combination) == 1 \
+                        and contains_task_data   \
+                        and my_module.has_task_model_for_tbid(combination[0][5:]):
+                            if tbid_combi in tbid_combinations_covered:
+                                if self.debug:
+                                    print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
+                            else:
+                                retval.append((priority, ':'.join((module_name, combination[0]))))
+                                tbid_combinations_covered[tbid_combi] = combination
+                                if self.debug:
+                                    print('\t\t\t--> added data as module has a task model ready')
                         elif my_module.can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
-                            retval.append(':'.join((module_name, '+'.join(combination))))
+                            if tbid_combi in tbid_combinations_covered:
+                                if self.debug:
+                                    print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
+                            else:
+                                retval.append((priority, ':'.join((module_name, '+'.join(combination)))))
+                                tbid_combinations_covered[tbid_combi] = combination
+                                if self.debug:
+                                    print('\t\t\t--> added data as module can train on it')
+                        elif self.debug:
+                            print('\t\t\tNo suitable data found for')
+                            print('\t\t\t * contains_ud25_data', contains_ud25_data)
+                            print('\t\t\t * contains_task_data', contains_task_data)
+                            print('\t\t\t * is_polyglot', is_polyglot)
             elif self.debug:
                 print('\t\tLanguage %s is not supported' %self.lcode)
+        retval.sort()
+        if len(retval) > 2:
+            print('\tPruning too long list of modules', retval)
+            retval = retval[:2]
+        # remove priority
+        retval = map(lambda x: x[1], retval)
         if self.debug:
             print('\tFinished checking modules for', self.tbid)
             print('\t-->', retval)
@@ -472,25 +550,34 @@ class Config_default:
         tasks.wait_for_tasks(tasks)
 
     def train_missing_segmenter_model(self):
-        segmenter = importlib.import_module(self.variant[0])
-        segmenter.train_model_if_missing(
+        segmenter_module, datasets = self.variant[0].split(':', 1)
+        segmenter = importlib.import_module(segmenter_module)
+        tasks = []
+        tasks.append(segmenter.train_model_if_missing(
             self.lcode,
             self.init_seed,
-        )
+            datasets,
+        ))
+        return tasks
 
     def train_missing_basic_parser_models(self):
+        tasks = []
         for p_index, p_name in enumerate(self.variant[1]):
-            basic_parser = importlib.import_module(p_name)
-            basic_parser.train_model_if_missing(
+            p_module_name, datasets = p_name.split(':', 1)
+            basic_parser = importlib.import_module(p_module_name)
+            tasks.append(basic_parser.train_model_if_missing(
                 self.lcode,
                 '%s%02d' %(self.init_seed, p_index),
-            )
+                datasets,
+            ))
 
     def train_missing_enhanced_parser_model(self):
-        enhanced_parser = importlib.import_module(self.variant[2])
+        enhanced_module, datasets = self.variant[2].split(':', 1)
+        enhanced_parser = importlib.import_module(enhanced_module)
         enhanced_parser.train_model_if_missing(
             self.lcode,
             self.init_seed,
+            datasets,
         )
 
 class Config_cs(Config_default):
@@ -503,8 +590,21 @@ class Config_cs(Config_default):
                 tbids_covered.add(tbid)
                 yield dataset
         for tbid in ('cs_cac', 'cs_pdt'):
-            if tbid not in tbids_covered:
-                yield 'ud25.' + tbid
+            #if tbid not in tbids_covered:
+            yield 'ud25.' + tbid
+
+class Config_en(Config_default):
+
+    def get_dataset_names(self):
+        tbids_covered = set()
+        for dataset in Config_default.get_dataset_names(self):
+            if dataset.startswith('task.'):
+                tbid = dataset.split('.')[1]
+                tbids_covered.add(tbid)
+                yield dataset
+        for tbid in ('en_ewt', 'en_gum', 'en_lines', 'en_partut'):
+            #if tbid not in tbids_covered:
+            yield 'ud25.' + tbid
 
 def main():
     options = Options()

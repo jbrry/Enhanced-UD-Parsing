@@ -29,3 +29,6 @@ def can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
 def has_ud25_model_for_tbid(tbid):
     return False
 
+def has_task_model_for_tbid(tbid):
+    return False
+
