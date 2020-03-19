@@ -163,3 +163,8 @@ def get_project_dir():
         return os.environ['PRJ_DIR']
     return os.path.dirname(os.getcwd())
 
+def get_model_dir(module_name, lcode, init_seed, datasets, n_datasets, model_basedir):
+    h = hashlib.sha256('%d:%s:%s' %(len(init_seed), init_seed, datasets))
+    h = utilities.hex2base62(h.hexdigest(), 12)[:12]
+    return = '%s/%s-%s-%d-%s' %(model_basedir, lcode, module_name, n_datasets, h)
+
