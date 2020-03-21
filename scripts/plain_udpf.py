@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 import common_udpipe_future
+import utilities
 
 def supports_lcode(lcode):
     # This parser supports any language for which the user
@@ -38,10 +39,10 @@ def train_model_if_missing(lcode, init_seed, datasets, model_basedir, temp_based
     datasets = datasets.split('+')
     n_datasets = len(datasets)
     assert n_datasets > 0
-    model_dir = utilities.get_model_dir('plain_udpf', lcode, init_seed, datasets, n_datasets, model_basedir)
+    model_dir = utilities.get_model_dir('plain_udpf', lcode, init_seed, datasets, model_basedir)
     if os.path.exists(model_dir):
         return None
-    tr_data_filename, n_tokens = utilities.get_concat_filename_and_size(datasets, n_datasets, temp_basedir)
+    tr_data_filename, n_tokens = utilities.get_concat_filename_and_size(datasets, temp_basedir)
     epochs = 60
     while epochs * n_tokens > max_tr_tokens:
         epochs -= 1

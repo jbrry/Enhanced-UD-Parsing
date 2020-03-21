@@ -68,6 +68,9 @@ Options:
                             provided by the shared task.
                             (Default: workdir + /train-dev)
 
+    --tempdir  DIR          Path to directory for intermediate files
+                            (Default: workdir + /temp)
+
     --modeldir  DIR         Path to model directory
                             (Default: workdir + /models)
 
@@ -109,6 +112,7 @@ Options:
         self.modules_not_to_train = set()
         self.workdir    = 'data'
         self.taskdir    = None
+        self.tempdir    = None
         self.modeldir   = None
         self.predictdir = None
         self.init_seed  = 42
@@ -134,6 +138,9 @@ Options:
             elif option == '--taskdir':
                 self.taskdir = sys.argv[1]
                 del sys.argv[1]
+            elif option == '--tempdir':
+                self.tempdir = sys.argv[1]
+                del sys.argv[1]
             elif option == '--modeldir':
                 self.modeldir = sys.argv[1]
                 del sys.argv[1]
@@ -157,6 +164,8 @@ Options:
                 return True
         if self.taskdir is None:
             self.taskdir = '/'.join((self.workdir, 'train-dev'))
+        if self.tempdir is None:
+            self.tempdir = '/'.join((self.workdir, 'temp'))
         if self.modeldir is None:
             self.modeldir = '/'.join((self.workdir, 'models'))
         if self.predictdir is None:
@@ -167,7 +176,7 @@ Options:
 
     def get_tasks_and_configs(self):
         self.prediction_tasks = []
-        self.training_data = []
+        self.task_training_data = []
         self.configs = {}
         prepare_configs = []
         for tbname in os.listdir(self.taskdir):
@@ -202,7 +211,7 @@ Options:
                     self.prediction_tasks.append((path, tbid, lcode, data_type))
                 if filename.endswith('-ud-train.conllu'):
                     # found training data
-                    self.training_data.append((path, tbid, lcode))
+                    self.task_training_data.append((path, tbid, lcode))
             if tbid is None:
                 print('Warning: No TBID found for %s. Please add `tbid.txt`.' %tbname)
             if not tbid_needs_models:
@@ -234,8 +243,7 @@ Options:
             # test set and config variant)
             config_variants = config_class(
                 tbid, lcode,
-                task_training_data = self.training_data,
-                debug = self.debug,
+                options = self,
             ).get_variants()
             configs_for_tbid = []
             for variant in config_variants:
@@ -243,18 +251,16 @@ Options:
                     print('Preparing variant %s for TBID %s' %(variant, tbid))
                 configs_for_tbid.append(config_class(
                     tbid, lcode,
+                    options = self,
                     variant = variant,
-                    task_training_data = self.training_data,
-                    init_seed = self.init_seed,
-                    debug = self.debug,
                 ))
             self.configs[tbid] = configs_for_tbid
         if self.debug:
             print('prediction_tasks:', len(self.prediction_tasks))
             for item in sorted(self.prediction_tasks):
                 print('\t', item)
-            print('training_data:', len(self.training_data))
-            for item in sorted(self.training_data):
+            print('training_data:', len(self.task_training_data))
+            for item in sorted(self.task_training_data):
                 print('\t', item)
             print('configs:', len(self.configs))
             for key in sorted(list(self.configs.keys())):
@@ -278,17 +284,13 @@ Options:
 
 class Config_default:
 
-    def __init__(self, tbid, lcode,
-        variant = None, task_training_data = None,
-        debug = False,
-        init_seed = '101',
+    def __init__(self, tbid, lcode, options,
+        variant = None,
     ):
         self.tbid = tbid
         self.lcode = lcode
         self.variant = variant
-        self.task_training_data = task_training_data
-        self.init_seed = init_seed
-        self.debug = debug
+        self.options = options
         self.segmenter = None
         self.basic_parsers = []
         self.enhanced_parser = None
@@ -363,37 +365,37 @@ class Config_default:
         return 3
 
     def get_segmenters(self):
-        if self.debug:
+        if self.options.debug:
             print('Segmenters for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
             self.get_segmenter_names()
         )
 
     def get_basic_parsers(self):
-        if self.debug:
+        if self.options.debug:
             print('Basic parsers for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
             self.get_basic_parser_names()
         )
 
     def get_enhanced_parsers(self):
-        if self.debug:
+        if self.options.debug:
             print('Enhanced parsers for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
             self.get_enhanced_parser_names()
         )
 
     def filter_by_lcode_and_add_datasets(self, module_names):
-        if self.debug:
+        if self.options.debug:
             print('\tQuerying datasets for', self.tbid)
             sys.stdout.flush()
         datasets = list(self.get_dataset_names())
         datasets.sort()
-        if self.debug:
+        if self.options.debug:
             print('\t-->', datasets)
         retval = []
         for module_name in module_names:
-            if self.debug:
+            if self.options.debug:
                 print('\t\tImporting', module_name)
                 sys.stdout.flush()
             try:
@@ -402,7 +404,7 @@ class Config_default:
                 print('Warning: module %r not available, skipping' %module_name)
                 continue
             if my_module.supports_lcode(self.lcode):
-                if self.debug:
+                if self.options.debug:
                     print('\t\tLanguage %s is supported' %self.lcode)
                 if not datasets:
                     if my_module.has_default_model_for_lcode(self.lcode):
@@ -422,7 +424,7 @@ class Config_default:
                             for j in range(n_datasets)
                             if (combination_index & (1 << j))
                         ]
-                        if self.debug:
+                        if self.options.debug:
                             print('\t\t\tChecking dataset combination', combination)
 
                         contains_ud25_data = False
@@ -450,14 +452,14 @@ class Config_default:
                         prio2 = n_all_tbids - prio1
                         priority = min(2*prio1-1, 2*prio2)
                         if duplicate_tbid:
-                            if self.debug:
+                            if self.options.debug:
                                 print('\t\t\t--> duplicate tbid, skipping')
                             continue
                         tbid_combi = tuple(sorted(data_tbids))
                         if not contains_target_lcode:
                             # dataset combination has no data with the
                             # target lcode --> skip
-                            if self.debug:
+                            if self.options.debug:
                                 print('\t\t\t--> no matching lcode, skipping')
                             continue
                         is_polyglot = len(data_lcodes) > 1
@@ -470,39 +472,39 @@ class Config_default:
                         and contains_ud25_data   \
                         and my_module.has_ud25_model_for_tbid(combination[0][5:]):
                             if tbid_combi in tbid_combinations_covered:
-                                if self.debug:
+                                if self.options.debug:
                                     print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
                             else:
                                 retval.append((priority, ':'.join((module_name, combination[0]))))
                                 tbid_combinations_covered[tbid_combi] = combination
-                                if self.debug:
+                                if self.options.debug:
                                     print('\t\t\t--> added data as module has a ud25 model ready')
                         if len(combination) == 1 \
                         and contains_task_data   \
                         and my_module.has_task_model_for_tbid(combination[0][5:]):
                             if tbid_combi in tbid_combinations_covered:
-                                if self.debug:
+                                if self.options.debug:
                                     print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
                             else:
                                 retval.append((priority, ':'.join((module_name, combination[0]))))
                                 tbid_combinations_covered[tbid_combi] = combination
-                                if self.debug:
+                                if self.options.debug:
                                     print('\t\t\t--> added data as module has a task model ready')
                         elif my_module.can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
                             if tbid_combi in tbid_combinations_covered:
-                                if self.debug:
+                                if self.options.debug:
                                     print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
                             else:
                                 retval.append((priority, ':'.join((module_name, '+'.join(combination)))))
                                 tbid_combinations_covered[tbid_combi] = combination
-                                if self.debug:
+                                if self.options.debug:
                                     print('\t\t\t--> added data as module can train on it')
-                        elif self.debug:
+                        elif self.options.debug:
                             print('\t\t\tNo suitable data found for')
                             print('\t\t\t * contains_ud25_data', contains_ud25_data)
                             print('\t\t\t * contains_task_data', contains_task_data)
                             print('\t\t\t * is_polyglot', is_polyglot)
-            elif self.debug:
+            elif self.options.debug:
                 print('\t\tLanguage %s is not supported' %self.lcode)
         retval.sort()
         if len(retval) > 2:
@@ -510,7 +512,7 @@ class Config_default:
             retval = retval[:2]
         # remove priority
         retval = map(lambda x: x[1], retval)
-        if self.debug:
+        if self.options.debug:
             print('\tFinished checking modules for', self.tbid)
             print('\t-->', retval)
             sys.stdout.flush()
@@ -520,7 +522,7 @@ class Config_default:
         ''' subclasses should extend this list to include
             appropriate ud25 data
         '''
-        for path, tbid, lcode in self.task_training_data:
+        for path, tbid, lcode in self.options.task_training_data:
             if lcode == self.lcode:
                 yield 'task.' + tbid
 
@@ -567,16 +569,17 @@ class Config_default:
     def train_missing_segmenter_model(self):
         segmenter_module, datasets = self.variant[0].split(':', 1)
         segmenter = importlib.import_module(segmenter_module)
-        if self.debug:
+        if self.options.debug:
             print('Training %s with seed %s and data %s' %(
-                segmenter_module, self.init_seed, datasets,
+                segmenter_module, self.options.init_seed, datasets,
             ))
         tasks = []
         tasks.append(segmenter.train_model_if_missing(
             self.lcode,
-            self.init_seed,
+            self.options.init_seed,
             datasets,
-
+            self.options.modeldir,
+            self.options.tempdir,
         ))
         return tasks
 
@@ -585,8 +588,8 @@ class Config_default:
         for p_index, p_name in enumerate(self.variant[1]):
             p_module_name, datasets = p_name.split(':', 1)
             basic_parser = importlib.import_module(p_module_name)
-            init_seed = '%s%02d' %(self.init_seed, p_index)
-            if self.debug:
+            init_seed = '%s%02d' %(self.options.init_seed, p_index)
+            if self.options.debug:
                 print('Training %s with seed %s and data %s' %(
                     p_module_name, init_seed, datasets,
                 ))
@@ -594,19 +597,23 @@ class Config_default:
                 self.lcode,
                 init_seed,
                 datasets,
+                self.options.modeldir,
+                self.options.tempdir,
             ))
 
     def train_missing_enhanced_parser_model(self):
         enhanced_module, datasets = self.variant[2].split(':', 1)
         enhanced_parser = importlib.import_module(enhanced_module)
-        if self.debug:
+        if self.options.debug:
             print('Training %s with seed %s and data %s' %(
-                enhanced_module, self.init_seed, datasets,
+                enhanced_module, self.options.init_seed, datasets,
             ))
         enhanced_parser.train_model_if_missing(
             self.lcode,
-            self.init_seed,
+            self.options.init_seed,
             datasets,
+            self.options.modeldir,
+            self.options.tempdir,
         )
 
 class Config_cs(Config_default):

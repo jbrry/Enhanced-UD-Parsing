@@ -163,8 +163,32 @@ def get_project_dir():
         return os.environ['PRJ_DIR']
     return os.path.dirname(os.getcwd())
 
-def get_model_dir(module_name, lcode, init_seed, datasets, n_datasets, model_basedir):
-    h = hashlib.sha256('%d:%s:%s' %(len(init_seed), init_seed, datasets))
-    h = utilities.hex2base62(h.hexdigest(), 12)[:12]
-    return = '%s/%s-%s-%d-%s' %(model_basedir, lcode, module_name, n_datasets, h)
+def get_model_dir(module_name, lcode, init_seed, datasets, model_basedir):
+    h = hashlib.sha256('%s:%d:%s:%s' %(
+        module_name, len(init_seed), init_seed, datasets,
+    ))
+    h = hex2base62(h.hexdigest(), 5)[:5]
+    return '%s/%s-%s-%d-%s-%s-s' %(
+        model_basedir, lcode, module_name, datasets.count('+') + 1,
+        datasets.replace('.', '_'), init_seed, h
+    ))
+
+def get_concat_filename_and_size(datasets, temp_basedir):
+    h = hashlib.sha256(datasets)
+    h = hex2base62(h.hexdigest(), 5)[:5]
+    filename = '%s/%s-%d-%s-%s.conllu' %(
+        temp_basedir, lcode, datasets.count('+') + 1,
+        datasets.replace('.', '_'), h,
+    )
+    if os.path.exits(filename):
+        return filename
+    dirname, _ = filename.rsplit('/', 1)
+    makedirs(dirname)
+    f_out = open(filename, 'wb')
+    for dataset in datasets.split('+'):
+        f_out.write(b'# tbemb = %s\n' %dataset)
+        # TODO: copy dataset
+        raise NotImplementedError
+    f_out.close()
+    return filename
 
