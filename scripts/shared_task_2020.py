@@ -68,6 +68,9 @@ Options:
                             provided by the shared task.
                             (Default: workdir + /train-dev)
 
+    --ud25dir  DIR          Path to the UD v2.5 folder
+                            (Default: workdir + /ud-treebanks-v2.5)
+
     --tempdir  DIR          Path to directory for intermediate files
                             (Default: workdir + /temp)
 
@@ -112,6 +115,7 @@ Options:
         self.modules_not_to_train = set()
         self.workdir    = 'data'
         self.taskdir    = None
+        self.ud25dir    = None
         self.tempdir    = None
         self.modeldir   = None
         self.predictdir = None
@@ -164,6 +168,8 @@ Options:
                 return True
         if self.taskdir is None:
             self.taskdir = '/'.join((self.workdir, 'train-dev'))
+        if self.ud25dir is None:
+            self.ud25dir = '/'.join((self.workdir, 'ud-treebanks-v2.5'))
         if self.tempdir is None:
             self.tempdir = '/'.join((self.workdir, 'temp'))
         if self.modeldir is None:
@@ -174,57 +180,71 @@ Options:
             return True
         return False
 
-    def get_tasks_and_configs(self):
-        self.prediction_tasks = []
-        self.task_training_data = []
-        self.configs = {}
-        prepare_configs = []
-        for tbname in os.listdir(self.taskdir):
+    def scan_ud_or_task_folder(self, folder_path, folder_type):
+        retval = {}
+        for tbname in os.listdir(folder_path):
             if not tbname.startswith('UD_'):
                 if self.verbose:
-                    print('Skipping non-UD entry in taskdir:', tbname)
+                    print('Skipping non-UD entry in %s: %s' %(folder_type, tbname))
                 continue
             # Scan the treebank folder
-            tbdir = '/'.join((self.taskdir, tbname))
+            tbdir = '/'.join((folder_path, tbname))
             tbid_needs_models = False
-            tbid, lcode, data_type = None, None, None
+            tbid = None
+            training_data = None
+            prediction_tasks = []
             for filename in os.listdir(tbdir):
                 path = '/'.join((tbdir, filename))
+                new_tbid = None
+                dataset_type, dataset_format = None, None
                 if '-ud-' in filename:
-                    tbid, _, suffix = filename.rsplit('-', 2)
-                    data_type = suffix.split('.')[0]
-                if filename == 'tbid.txt':
+                    new_tbid, _, suffix = filename.rsplit('-', 2)
+                    dataset_type, dataset_format = suffix.split('.')
+                elif filename == 'tbid.txt':
                     f = open('%s/%s' %(tbdir, filename), 'r')
-                    tbid = f.readline().strip()
+                    new_tbid = f.readline().strip()
                     f.close()
                     tbid_needs_models = True
-                if tbid:
-                    lcode = tbid.split('_')[0]
-                    if '-' in tbid:
-                        tbid = tbid.replace('-', '_')
+                if new_tbid:
+                    if '-' in new_tbid:
                         if self.verbose:
-                            print('Dash in TBID replaced with underscore')
-                if filename.endswith('-ud-dev.txt') \
-                or filename.endswith('-ud-test.txt'):
+                            print('Dash in TBID %s replaced with underscore' %new_tbid)
+                        new_tbid = new_tbid.replace('-', '_')
+                    if tbid is not None and new_tbid != tbid:
+                        raise ValueError('Mismatching TBIDs in %s' %tbdir)
+                    tbid = new_tbid
+                if dataset_format == 'txt' and dataset_type in ('dev', 'test'):
                     # found a prediction task
                     tbid_needs_models = True
-                    self.prediction_tasks.append((path, tbid, lcode, data_type))
-                if filename.endswith('-ud-train.conllu'):
+                    prediction_tasks.append((path, dataset_type))
+                if (dataset_type, dataset_format) == ('train', 'conllu'):
                     # found training data
-                    self.task_training_data.append((path, tbid, lcode))
+                    training_data = path
             if tbid is None:
-                print('Warning: No TBID found for %s. Please add `tbid.txt`.' %tbname)
+                print('Warning: No TBID found for %s %s. Please add `tbid.txt`.' %(folder_type, tbname))
+            else:
+                retval[tbid] = (
+                    tbdir, training_data, tbid_needs_models, prediction_tasks,
+                )
+        return retval
+
+    def get_tasks_and_configs(self):
+        self.task_treebanks = self.scan_ud_or_task_folder(
+            self.taskdir, 'taskdir'
+        )
+        self.configs = {}
+        for tbid in sorted(list(self.task_treebanks.keys())):
+            tb_info = self.task_treebanks[tbid]
+            tbdir, training_data, tbid_needs_models, prediction_tasks = tb_info
             if not tbid_needs_models:
-                continue
-            # postpone config creation to when all folders have been read
-            prepare_configs.append((tbid, lcode))
-        prepare_configs.sort()
-        for tbid, lcode in prepare_configs:
-            if tbid in self.configs:
-                print('Warning: Skipping duplicate TBID', tbid)
                 continue
             if self.debug:
                 print('Preparing configurations for TBID', tbid)
+                print('%d prediction tasks:' %len(prediction_tasks))
+                for item in sorted(prediction_tasks):
+                    print('\t\t', item)
+                print('Training data:', training_data)
+            lcode = tbid.split('_')[0]
             # Find the most specific config available
             # TODO: Add language family as a layer between
             #       lcode and default.
@@ -256,13 +276,7 @@ Options:
                 ))
             self.configs[tbid] = configs_for_tbid
         if self.debug:
-            print('prediction_tasks:', len(self.prediction_tasks))
-            for item in sorted(self.prediction_tasks):
-                print('\t', item)
-            print('training_data:', len(self.task_training_data))
-            for item in sorted(self.task_training_data):
-                print('\t', item)
-            print('configs:', len(self.configs))
+            print('%d TBIDs configured' %len(self.configs))
             for key in sorted(list(self.configs.keys())):
                 items = self.configs[key]
                 print('\t', key, len(items))
@@ -281,6 +295,11 @@ Options:
                 else:
                     print('Not training %r as user requested to skip it' %config)
         utilities.wait_for_tasks(tasks)
+
+    def scan_ud25(self):
+        self.ud25_treebanks = self.scan_ud_or_task_folder(
+            self.ud25dir, 'UD v2.5'
+        )
 
 class Config_default:
 
@@ -522,8 +541,11 @@ class Config_default:
         ''' subclasses should extend this list to include
             appropriate ud25 data
         '''
-        for path, tbid, lcode in self.options.task_training_data:
-            if lcode == self.lcode:
+        for tbid in self.options.task_treebanks:
+            lcode = tbid.split('_')[0]
+            tb_info = self.options.task_treebanks[tbid]
+            training_data = tb_info[1]
+            if training_data and self.lcode == lcode :
                 yield 'task.' + tbid
 
     def init_segmenter(self):
@@ -578,8 +600,7 @@ class Config_default:
             self.lcode,
             self.options.init_seed,
             datasets,
-            self.options.modeldir,
-            self.options.tempdir,
+            self.options,
         ))
         return tasks
 
@@ -597,8 +618,7 @@ class Config_default:
                 self.lcode,
                 init_seed,
                 datasets,
-                self.options.modeldir,
-                self.options.tempdir,
+                self.options,
             ))
 
     def train_missing_enhanced_parser_model(self):
@@ -612,8 +632,7 @@ class Config_default:
             self.lcode,
             self.options.init_seed,
             datasets,
-            self.options.modeldir,
-            self.options.tempdir,
+            self.options,
         )
 
 class Config_cs(Config_default):
@@ -645,6 +664,7 @@ class Config_en(Config_default):
 def main():
     options = Options()
     options.get_tasks_and_configs()
+    options.scan_ud25()
     options.train_missing_models()
 
 if __name__ == "__main__":

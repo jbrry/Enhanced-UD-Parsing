@@ -34,15 +34,16 @@ def has_ud25_model_for_tbid(tbid):
 def has_task_model_for_tbid(tbid):
     return False
 
-def train_model_if_missing(lcode, init_seed, datasets, model_basedir, temp_basedir, max_tr_tokens = 27000111):
-    p_datasets = datasets
-    datasets = datasets.split('+')
-    n_datasets = len(datasets)
-    assert n_datasets > 0
-    model_dir = utilities.get_model_dir('plain_udpf', lcode, init_seed, datasets, model_basedir)
+def train_model_if_missing(lcode, init_seed, datasets, options, max_tr_tokens = 27000111):
+    assert '.' in datasets
+    model_dir = utilities.get_model_dir(
+        'plain_udpf', lcode, init_seed, datasets, options,
+    )
     if os.path.exists(model_dir):
         return None
-    tr_data_filename, n_tokens = utilities.get_concat_filename_and_size(datasets, temp_basedir)
+    tr_data_filename, n_tokens = utilities.get_conllu_concat_filename_and_size(
+        lcode, datasets, options,
+    )
     epochs = 60
     while epochs * n_tokens > max_tr_tokens:
         epochs -= 1
@@ -50,7 +51,7 @@ def train_model_if_missing(lcode, init_seed, datasets, model_basedir, temp_based
         tr_data_filename, init_seed, model_dir,
         epochs = max(6, epochs),
         priority = 20,
-        is_multi_treebank = n_datasets > 1,
+        is_multi_treebank = '+' in datasets,
         submit_and_return = True,
     )
 
@@ -69,7 +70,7 @@ def train(
     if is_multi_treebank:
         raise ValueError('Multi-treebank models not supported by current wrapper script.')
     command = []
-    command.append('./udpipe_future-train.sh')
+    command.append('scripts/plain_udpf-train.sh')
     command.append(dataset_filename)
     if seed is None:
         raise NotImplementedError
@@ -114,7 +115,7 @@ def predict(
     if is_multi_treebank:
         raise ValueError('Multi-treebank models not supported by current wrapper script.')
     command = []
-    command.append('./udpipe_future-predict.sh')
+    command.append('scripts/plain_udpf-predict.sh')
     command.append(model_path)
     command.append(input_path)
     command.append(prediction_output_path)

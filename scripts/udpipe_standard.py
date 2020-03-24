@@ -51,7 +51,7 @@ def get_udpipe_dir():
         return os.environ['UDPIPE_DIR']
     return '/'.join((utilities.get_project_dir(), 'udpipe'))
 
-def train_model_if_missing(lcode, init_seed, dataset, model_basedir, temp_basedir, max_tr_tokens = 27000111):
+def train_model_if_missing(lcode, init_seed, dataset, options, max_tr_tokens = 27000111):
     if '+' in dataset:
         raise ValueError('No off-the-shelf udpipe model for %r' %datasets)
     _, tbid = dataset.split('.', 1)

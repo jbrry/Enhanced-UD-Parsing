@@ -163,32 +163,68 @@ def get_project_dir():
         return os.environ['PRJ_DIR']
     return os.path.dirname(os.getcwd())
 
-def get_model_dir(module_name, lcode, init_seed, datasets, model_basedir):
+def get_model_dir(module_name, lcode, init_seed, datasets, options):
+    if not os.path.exists(options.modeldir):
+        makedirs(options.modeldir)
     h = hashlib.sha256('%s:%d:%s:%s' %(
         module_name, len(init_seed), init_seed, datasets,
     ))
     h = hex2base62(h.hexdigest(), 5)[:5]
-    return '%s/%s-%s-%d-%s-%s-s' %(
-        model_basedir, lcode, module_name, datasets.count('+') + 1,
+    return '%s/%s-%s-%d-%s-%s-%s' %(
+        options.modeldir, lcode, module_name, datasets.count('+') + 1,
         datasets.replace('.', '_'), init_seed, h
-    ))
+    )
 
-def get_concat_filename_and_size(datasets, temp_basedir):
+def get_conllu_concat_filename_and_size(target_lcode, datasets, options):
+    if not os.path.exists(options.tempdir):
+        makedirs(options.tempdir)
     h = hashlib.sha256(datasets)
     h = hex2base62(h.hexdigest(), 5)[:5]
     filename = '%s/%s-%d-%s-%s.conllu' %(
-        temp_basedir, lcode, datasets.count('+') + 1,
+        options.tempdir, target_lcode, datasets.count('+') + 1,
         datasets.replace('.', '_'), h,
     )
-    if os.path.exits(filename):
-        return filename
+    n_tokens = 0
+    if os.path.exists(filename):
+        f = open(filename, 'rb')
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            if not line.startswith('#') and b'\t' in line:
+                n_tokens += 1
+        f.close()
+        return filename, n_tokens
     dirname, _ = filename.rsplit('/', 1)
     makedirs(dirname)
     f_out = open(filename, 'wb')
     for dataset in datasets.split('+'):
         f_out.write(b'# tbemb = %s\n' %dataset)
-        # TODO: copy dataset
-        raise NotImplementedError
+        # copy dataset
+        conllu_file, _ = get_conllu_and_text_for_dataset(dataset, options)
+        f_in = open(conllu_file, 'rb')
+        while True:
+            line = f_in.readline()
+            if not line:
+                break
+            f_out.write(line)
+            # count tokens
+            if not line.startswith('#') and b'\t' in line:
+                n_tokens += 1
+        f_in.close()
     f_out.close()
-    return filename
+    return filename, n_tokens
+
+def get_conllu_and_text_for_dataset(dataset, options):
+    dataset_type, tbid = dataset.split('.')
+    if dataset_type == 'task':
+        tb_info = options.task_treebanks[tbid]
+    elif dataset_type == 'ud25':
+        tb_info = options.ud25_treebanks[tbid]
+    else:
+        raise ValueError('Unknown dataset type %r in %r' %(dataset_type, dataset))
+    training_conllu_path = tb_info[1]
+    # https://stackoverflow.com/questions/2556108/rreplace-how-to-replace-the-last-occurrence-of-an-expression-in-a-string
+    training_txt_path = '.txt'.join(training_conllu_path.rsplit('.conllu', 1))
+    return training_conllu_path, training_txt_path
 

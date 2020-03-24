@@ -160,7 +160,7 @@ class Task:
         else:
             self.poll_frequency = 1.0
         assert self.priority >= 0
-        assert self.priority < 100
+        assert self.priority < 1000
 
     def __repr__(self):
         parts = []
