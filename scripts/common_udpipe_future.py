@@ -210,7 +210,7 @@ class Task:
         hostname = 'unknown'
         for envkey in 'HOSTNAME SLURMD_NODENAME SLURM_JOB_NODELIST'.split():
             try:
-                hostname = os.environ[envkey].replace('-', '_'),
+                hostname = os.environ[envkey].replace('-', '_')
                 break
             except KeyError:
                 pass
