@@ -207,10 +207,17 @@ class Task:
         else:
             t0 = 0.0
         command_fingerprint = hashlib.sha256(b'\n'.join(self.command)).hexdigest()
+        hostname = 'unknown'
+        for envkey in 'HOSTNAME SLURMD_NODENAME SLURM_JOB_NODELIST'.split():
+            try:
+                hostname = os.environ[envkey].replace('-', '_'),
+                break
+            except KeyError:
+                pass
         task_id = utilities.bstring('%02d-%05x-%s-%s-%d-%s-%s' %(
             self.priority,
             int((time.time()-t0)/60.0),
-            os.environ['HOSTNAME'].replace('-', '_'),
+            hostname,
             os.environ['SLURM_JOB_ID'] if 'SLURM_JOB_ID' in os.environ else 'na',
             os.getpid(),
             command_fingerprint[:8],
