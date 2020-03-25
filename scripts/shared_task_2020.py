@@ -633,6 +633,7 @@ class Config_default:
                 datasets,
                 self.options,
             ))
+        return tasks
 
     def train_missing_enhanced_parser_model(self):
         enhanced_module, datasets = self.variant[2].split(':', 1)
@@ -641,12 +642,14 @@ class Config_default:
             print('Training %s with seed %s and data %s' %(
                 enhanced_module, self.options.init_seed, datasets,
             ))
-        enhanced_parser.train_model_if_missing(
+        tasks = []
+        tasks.append(enhanced_parser.train_model_if_missing(
             self.lcode,
             self.options.init_seed,
             datasets,
             self.options,
-        )
+        ))
+        return tasks
 
 class Config_cs(Config_default):
 
