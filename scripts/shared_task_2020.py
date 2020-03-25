@@ -89,6 +89,11 @@ Options:
                             per treebank are trained, or 326 otherwise.
                             (Default: 42)
 
+    --training-only         Quit after training tasks have been submitted.
+                            (Default: Wait for tasks to finish and continue
+                            with prediction and development set
+                            evaluation.)
+
     --verbose               More detailed log output
 
     --tolerant              Use existing models and predictions even when
@@ -154,6 +159,8 @@ Options:
             elif option == '--init-seed':
                 self.init_seed = sys.argv[1]
                 del sys.argv[1]
+            elif option == '--training-only':
+                self.training_only = True
             elif option == '--verbose':
                 self.verbose = True
             elif option == '--debug':
@@ -166,6 +173,8 @@ Options:
             else:
                 print('Unsupported or not yet implemented option %s' %option)
                 return True
+        if self.debug:
+            self.verbose = True
         if self.taskdir is None:
             self.taskdir = '/'.join((self.workdir, 'train-dev'))
         if self.ud25dir is None:
@@ -294,6 +303,10 @@ Options:
                     tasks += config.train_missing_models()
                 else:
                     print('Not training %r as user requested to skip it' %config)
+        if self.verbose:
+            print('Submitted %d training task(s)' %(len(tasks)-tasks.count(None)))
+        if self.training_only:
+            sys.exit()
         utilities.wait_for_tasks(tasks)
 
     def scan_ud25(self):
