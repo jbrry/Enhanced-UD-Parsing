@@ -1103,7 +1103,7 @@ def train(
     command.append(common_udpipe_future.get_training_schedule(epochs))
     command.append(lcode)
     if is_multi_treebank:
-        command.append('--extra_input tbemb')
+        command.append('--extra_input tbemb')  # will be split into 2 args in wrapper script
     else:
         command.append('')
     for i in range(2):
@@ -1169,9 +1169,7 @@ def predict(
     command.append(prediction_output_path)
     command.append(lcode)
     if is_multi_treebank:
-        command.append('--extra_input tbemb')
-    else:
-        command.append('')
+        command.append('--extra_input tbemb')  # will be split into 2 args in wrapper script
     requires = npz_tasks.get_npz_files()
     if wait_for_input:
         requires.append(input_path)

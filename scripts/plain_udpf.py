@@ -34,22 +34,17 @@ def has_ud25_model_for_tbid(tbid):
 def has_task_model_for_tbid(tbid):
     return False
 
-def train_model_if_missing(lcode, init_seed, datasets, options, max_tr_tokens = 27000111):
-    assert '.' in datasets
-    model_dir = utilities.get_model_dir(
-        'plain_udpf', lcode, init_seed, datasets, options,
+def train_model_if_missing(lcode, init_seed, datasets, options):
+    details = utilities.get_training_details(
+        lcode, init_seed, datasets, options, 'plain_udpf',
     )
-    if os.path.exists(model_dir):
+    tr_data_filename, monitoring_datasets, model_dir, epochs = details
+    if tr_data_filename is None:
         return None
-    tr_data_filename, n_tokens = utilities.get_conllu_concat_filename_and_size(
-        lcode, datasets, options,
-    )
-    epochs = 60
-    while epochs * n_tokens > max_tr_tokens:
-        epochs -= 1
     return train(
         tr_data_filename, init_seed, model_dir,
-        epochs = max(6, epochs),
+        monitoring_datasets = monitoring_datasets,
+        epochs = epochs,
         priority = 20,
         is_multi_treebank = '+' in datasets,
         submit_and_return = True,
@@ -67,8 +62,6 @@ def train(
 ):
     if epoch_selection_dataset:
         raise ValueError('Epoch selection not supported with udpipe-future.')
-    if is_multi_treebank:
-        raise ValueError('Multi-treebank models not supported by current wrapper script.')
     command = []
     command.append('scripts/plain_udpf-train.sh')
     command.append(dataset_filename)
@@ -78,6 +71,10 @@ def train(
     command.append(model_dir)
     command.append('%d' %batch_size)
     command.append(common_udpipe_future.get_training_schedule(epochs))
+    if is_multi_treebank:
+        command.append('--extra_input tbemb')  # will be split into 2 args in wrapper script
+    else:
+        command.append('')
     for i in range(2):
         if len(monitoring_datasets) > i:
             command.append(monitoring_datasets[i].filename)
@@ -112,13 +109,13 @@ def predict(
     wait_for_input = False,
     wait_for_model = False,
 ):
-    if is_multi_treebank:
-        raise ValueError('Multi-treebank models not supported by current wrapper script.')
     command = []
     command.append('scripts/plain_udpf-predict.sh')
     command.append(model_path)
     command.append(input_path)
     command.append(prediction_output_path)
+    if is_multi_treebank:
+        command.append('--extra_input tbemb')  # will be split into 2 args in wrapper script
     requires = []
     if wait_for_input:
         requires.append(input_path)

@@ -82,7 +82,8 @@ Options:
 
     --init-seed  STRING     Initialise random number generator with STRING.
                             If STRING is empty, use system seed.
-                            Will be passed to parser for training with a
+                            Will be passed to basic parsers for training
+                            with a
                             2-digit suffix. If, for example, the parser can
                             only accepts seeds up to 32767 this seed must
                             not exceed 327, assuming no more than 67 models
@@ -202,6 +203,7 @@ Options:
             tbid = None
             training_data = None
             prediction_tasks = []
+            dev_conllu = None
             for filename in os.listdir(tbdir):
                 path = '/'.join((tbdir, filename))
                 new_tbid = None
@@ -229,11 +231,14 @@ Options:
                 if (dataset_type, dataset_format) == ('train', 'conllu'):
                     # found training data
                     training_data = path
+                if (dataset_type, dataset_format) == ('dev', 'conllu'):
+                    dev_conllu = path
             if tbid is None:
                 print('Warning: No TBID found for %s %s. Please add `tbid.txt`.' %(folder_type, tbname))
             else:
                 retval[tbid] = (
                     tbdir, training_data, tbid_needs_models, prediction_tasks,
+                    dev_conllu,
                 )
         return retval
 
@@ -619,7 +624,10 @@ class Config_default:
 
     def train_missing_basic_parser_models(self):
         tasks = []
-        for p_index, p_name in enumerate(self.variant[1]):
+        p_name2p_index = defaultdict(lambda: 0)
+        for p_name in self.variant[1]:
+            p_index = p_name2p_index[p_name]
+            p_name2p_index[p_name] = p_index + 1
             p_module_name, datasets = p_name.split(':', 1)
             basic_parser = importlib.import_module(p_module_name)
             init_seed = '%s%02d' %(self.options.init_seed, p_index)

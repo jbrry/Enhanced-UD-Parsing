@@ -175,33 +175,60 @@ def get_model_dir(module_name, lcode, init_seed, datasets, options):
         datasets.replace('.', '_'), init_seed, h
     )
 
-def get_conllu_concat_filename_and_size(target_lcode, datasets, options):
+def get_conllu_size(filename):
+    n_tokens = 0
+    f = open(filename, 'rb')
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        if not line.startswith('#') and b'\t' in line:
+            n_tokens += 1
+    f.close()
+    return n_tokens
+
+def get_conllu_concat_filename_and_size(
+    target_lcode, datasets, options,
+    dataset_partition,
+):
     if not os.path.exists(options.tempdir):
         makedirs(options.tempdir)
     h = hashlib.sha256(datasets)
     h = hex2base62(h.hexdigest(), 5)[:5]
-    filename = '%s/%s-%d-%s-%s.conllu' %(
+    filename = '%s/%s-%d-%s-%s-%s.conllu' %(
         options.tempdir, target_lcode, datasets.count('+') + 1,
+        dataset_partition,
         datasets.replace('.', '_'), h,
     )
-    n_tokens = 0
     if os.path.exists(filename):
-        f = open(filename, 'rb')
-        while True:
-            line = f.readline()
-            if not line:
-                break
-            if not line.startswith('#') and b'\t' in line:
-                n_tokens += 1
-        f.close()
-        return filename, n_tokens
+        return filename, get_conllu_size(filename)
+    datasets_with_conllu = []
+    for dataset in datasets.split('+'):
+        conllu_file, _ = get_conllu_and_text_for_dataset(
+            dataset, options, dataset_partition
+        )
+        if conllu_file:
+            datasets_with_conllu.append((dataset, conllu_file))
+        else:
+            print('Warning: Partition %s in %s not found for %s' %(
+                dataset_partition, dataset, datasets
+            ))
+    if not datasets_with_conllu:
+        # nothing to concatenate; refuse to create empty dataset
+        return None, 0
     dirname, _ = filename.rsplit('/', 1)
     makedirs(dirname)
+    if dataset_partition == 'train' and '+' not in datasets:
+        # no need to copy training files for mono-treebank models
+        # (dev files with just one tbid may still need tbemb annotation
+        # in case they are used to evaluate a multi-treebank model)
+        os.symlink(datasets_with_conllu[0][1], filename)
+        return filename, get_conllu_size(filename)
     f_out = open(filename, 'wb')
-    for dataset in datasets.split('+'):
+    n_tokens = 0
+    for dataset, conllu_file in datasets_with_conllu:
         f_out.write(b'# tbemb = %s\n' %dataset)
         # copy dataset
-        conllu_file, _ = get_conllu_and_text_for_dataset(dataset, options)
         f_in = open(conllu_file, 'rb')
         while True:
             line = f_in.readline()
@@ -215,7 +242,7 @@ def get_conllu_concat_filename_and_size(target_lcode, datasets, options):
     f_out.close()
     return filename, n_tokens
 
-def get_conllu_and_text_for_dataset(dataset, options):
+def get_conllu_and_text_for_dataset(dataset, options, dataset_partition = 'train'):
     dataset_type, tbid = dataset.split('.')
     if dataset_type == 'task':
         tb_info = options.task_treebanks[tbid]
@@ -223,8 +250,41 @@ def get_conllu_and_text_for_dataset(dataset, options):
         tb_info = options.ud25_treebanks[tbid]
     else:
         raise ValueError('Unknown dataset type %r in %r' %(dataset_type, dataset))
+    if dataset_partition == 'dev':
+        dev_conllu = tb_info[4]
+        # https://stackoverflow.com/questions/2556108/rreplace-how-to-replace-the-last-occurrence-of-an-expression-in-a-string
+        dev_txt = '.txt'.join(dev_conllu.rsplit('.conllu', 1))
+        return dev_conllu, dev_txt
+    if dataset_partition != 'train':
+        raise ValueError('Cannot use conllu and text files for partition %s in shared task' %dataset_partition)
     training_conllu_path = tb_info[1]
     # https://stackoverflow.com/questions/2556108/rreplace-how-to-replace-the-last-occurrence-of-an-expression-in-a-string
     training_txt_path = '.txt'.join(training_conllu_path.rsplit('.conllu', 1))
     return training_conllu_path, training_txt_path
+
+def get_training_details(lcode, init_seed, datasets, options, module_name, max_tr_tokens = 24000000):
+    assert '.' in datasets
+    model_dir = get_model_dir(
+        module_name, lcode, init_seed, datasets, options,
+    )
+    if os.path.exists(model_dir):
+        return None, None, None, None
+    tr_data_filename, n_tokens = get_conllu_concat_filename_and_size(
+        lcode, datasets, options, 'train',
+    )
+    if not tr_data_filename:
+        raise ValueError('Could not find conllu for %s' %datasets)
+    monitoring_datasets = []
+    for test_partition in ('dev',):  # testing on 'test' not allowed in shared task
+        test_data_path, _ = monitoring_datasets.append(
+            get_conllu_concat_filename_and_size(
+                lcode, datasets, options, test_partition,
+            )
+        )
+        if test_data_path:
+            monitoring_datasets.append(test_data_path)
+    epochs = 60
+    while epochs * n_tokens > max_tr_tokens and epochs > 6:
+        epochs -= 1
+    return tr_data_filename, monitoring_datasets, model_dir, epochs
 

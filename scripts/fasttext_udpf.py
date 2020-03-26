@@ -60,7 +60,7 @@ def train(
     command.append('%d' %batch_size)
     command.append(common_udpipe_future.get_training_schedule(epochs))
     if is_multi_treebank:
-        command.append('--extra_input tbemb')
+        command.append('--extra_input tbemb')  # split into 2 args by wrapper script
     else:
         command.append('')
     for i in range(2):
@@ -108,9 +108,7 @@ def predict(
     command.append(input_path)
     command.append(prediction_output_path)
     if is_multi_treebank:
-        command.append('--extra_input tbemb')
-    else:
-        command.append('')
+        command.append('--extra_input tbemb')  # split into 2 args by wrapper script
     requires = []
     if wait_for_input:
         requires.append(input_path)

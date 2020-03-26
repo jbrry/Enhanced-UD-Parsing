@@ -31,4 +31,10 @@ def has_ud25_model_for_tbid(tbid):
 def has_task_model_for_tbid(tbid):
     return False
 
+def train_model_if_missing(lcode, init_seed, datasets, options):
+    # We signal support of training above even though it is not yet
+    # supported here because otherwise nothing will start training
+    # as a configuration requires all pipeline steps.
+    print('Warning: training of enhanced parser not yet implemented')
+    return None
 

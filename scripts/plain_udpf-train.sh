@@ -33,8 +33,9 @@ LR_SCHEDULE=$5
 MIN_EPOCH_SENTENCES=9600
 
 # optional args:
-DEV_SET=$6
-TEST_SET=$7
+EXTRA_OPTIONS="$6"
+DEV_SET=$7
+TEST_SET=$8
 
 if [ -n "$DEV_SET" ]; then
     if [ -n "$TEST_SET" ]; then
@@ -105,6 +106,7 @@ echo "Batch size is $BATCH_SIZE" >> training.start
 echo "Minimum number of batches in each epoch: $MIN_EPOCH_BATCHES" >> training.start
 
 python ${PARSER_DIR}/ud_parser.py \
+    ${EXTRA_OPTIONS}              \
     --seed ${SEED}                \
     --logdir ./                   \
     --batch_size ${BATCH_SIZE}               \
