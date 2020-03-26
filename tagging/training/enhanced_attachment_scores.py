@@ -10,16 +10,14 @@ from allennlp.training.metrics.metric import Metric
 class EnhancedAttachmentScores(Metric):
     """
     Computes unlabeled precision, recall and f1.
-    As the parser uses a sigmoid, initially it will predict numerous edges 
-    therefore making recall high but precision low.
     
     :precision: correct / system_total
     :recall: correct / gold_total
     :f1: 2 * correct / (system_total + gold_total)
     
-    TODO: need to figure out how to mask punctuation which is ignored.
     
     # Parameters
+    
     ignore_classes : `List[int]`, optional (default = None)
         A list of label ids to ignore when computing metrics.
     """
@@ -42,10 +40,11 @@ class EnhancedAttachmentScores(Metric):
         gold_indices: torch.Tensor,
         gold_labels: torch.Tensor,
         gold_labeled_arcs: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: Optional[torch.BoolTensor] = None,
     ):
         """
         # Parameters
+        
         predicted_indices : `torch.Tensor`, required.
             A tensor of head index predictions of shape (batch_size, timesteps).
         predicted_labels : `torch.Tensor`, required.
@@ -59,16 +58,15 @@ class EnhancedAttachmentScores(Metric):
         mask : `torch.Tensor`, optional (default = None).
             A tensor of the same shape as `predicted_indices`.
         """
-        unwrapped = self.unwrap_to_tensors(
+        detached = self.detach_tensors(
             predicted_indices, predicted_labels, gold_indices, gold_labels, mask
         )
-        predicted_indices, predicted_labels, gold_indices, gold_labels, mask = unwrapped
+        predicted_indices, predicted_labels, gold_indices, gold_labels, mask = detached        
 
-        #print("this is a new batch")
-        
-        # first do UAS and LAS separately (TODO: do more efficiently)
-        
-        # UAS
+        if mask is None:
+            mask = torch.ones_like(predicted_indices).bool()
+             
+        # unlabeled
         for gold_edges, gold_edge_labels, predicted_edges, predicted_edge_labels in zip(gold_indices, gold_labels, predicted_indices, predicted_labels):
             self._num_gold_edges += len(gold_edges)
             self._num_pred_edges += len(predicted_edges)        
@@ -76,23 +74,18 @@ class EnhancedAttachmentScores(Metric):
                 if predicted_edge in gold_edges:
                     self._unlabeled_correct += 1.
         
-        # LAS
-        for gold_labeled_edges, predicted_labeled_edges in zip(gold_labeled_arcs, predicted_labeled_arcs):
-            #print(gold_labeled_edges, "-->", predicted_labeled_edges)
-        
+        # labeled
+        for gold_labeled_edges, predicted_labeled_edges in zip(gold_labeled_arcs, predicted_labeled_arcs):    
             for predicted_labeled_edge in predicted_labeled_edges:
                 if predicted_labeled_edge in gold_labeled_edges:
                     self._labeled_correct += 1.
             
-
-
     def get_metric(self, reset: bool = False):
         """
         # Returns
+        
         The accumulated metrics as a dictionary.
         """
-        #unlabeled_attachment_score = 0.0
-        #labeled_attachment_score = 0.0
         
         unlabeled_precision = 0.0
         unlabeled_recall = 0.0
@@ -101,7 +94,6 @@ class EnhancedAttachmentScores(Metric):
         labeled_precision = 0.0
         labeled_recall = 0.0
         labeled_f1 = 0.0
-
         
         if self._num_gold_edges > 0.0:         
             # precision
@@ -119,8 +111,6 @@ class EnhancedAttachmentScores(Metric):
         if reset:
             self.reset()
         return {
-#            "EUAS": unlabeled_attachment_score,
-#            "ELAS": labeled_attachment_score
             "unlabeled_precision": unlabeled_precision,
             "unlabeled_recall": unlabeled_recall,
             "unlabeled_f1": unlabeled_f1,
