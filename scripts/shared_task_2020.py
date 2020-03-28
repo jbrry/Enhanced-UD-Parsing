@@ -57,8 +57,9 @@ Options:
                             with a dot, e.g. "basic_parser.plain_udpf".
                             (Default: train all missing models)
 
-    --workdir  DIR          Path to working directory
-                            (Default: data)
+    --workdir  DIR          Path to working directory.
+                            Note that some modules require absolute paths.
+                            (Default: $PWD/data)
 
     --taskdir  DIR          Path to shared task data containing a UD-like
                             folder structure with training and dev files.
@@ -119,7 +120,7 @@ Options:
     def read_options(self):
         self.final_test = False
         self.modules_not_to_train = set()
-        self.workdir    = 'data'
+        self.workdir    = None
         self.taskdir    = None
         self.ud25dir    = None
         self.tempdir    = None
@@ -176,6 +177,8 @@ Options:
                 return True
         if self.debug:
             self.verbose = True
+        if self.workdir is None:
+            self.workdir = '/'.join((os.getcwd(), 'data'))
         if self.taskdir is None:
             self.taskdir = '/'.join((self.workdir, 'train-dev'))
         if self.ud25dir is None:
