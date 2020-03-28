@@ -34,6 +34,22 @@ def has_ud25_model_for_tbid(tbid):
 def has_task_model_for_tbid(tbid):
     return False
 
+def train_model_if_missing(lcode, init_seed, datasets, options):
+    details = utilities.get_training_details(
+        lcode, init_seed, datasets, options, 'fasttext_udpf',
+    )
+    tr_data_filename, monitoring_datasets, model_dir, epochs = details
+    if tr_data_filename is None:
+        return None
+    return train(
+        tr_data_filename, init_seed, model_dir,
+        monitoring_datasets = monitoring_datasets,
+        epochs = epochs,
+        priority = 20,
+        is_multi_treebank = '+' in datasets,
+        submit_and_return = True,
+    )
+
 def train(
     dataset_filename, seed, model_dir,
     epoch_selection_dataset = None,
