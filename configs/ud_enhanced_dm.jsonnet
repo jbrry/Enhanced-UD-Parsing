@@ -5,7 +5,7 @@ local embedding_dim = word_embedding_dim + pos_embedding_dim + char_embedding_di
 local hidden_dim = 600;
 local num_epochs = 50;
 local patience = 10;
-local batch_size = 1;
+local batch_size = 16;
 local learning_rate = 0.001;
 
 {
@@ -25,7 +25,7 @@ local learning_rate = 0.001;
     "validation_data_path": std.extVar("DEV_DATA_PATH"),
     //"test_data_path": std.extVar("TEST_DATA_PATH"),
     "model": {
-      "type": "enhanced_parser",
+      "type": "enhanced_dm_parser",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {

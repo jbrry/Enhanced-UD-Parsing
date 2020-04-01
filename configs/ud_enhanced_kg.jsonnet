@@ -25,8 +25,7 @@ local learning_rate = 0.001;
     "validation_data_path": std.extVar("DEV_DATA_PATH"),
     //"test_data_path": std.extVar("TEST_DATA_PATH"),
     "model": {
-      //enhanced_kg_parser
-      "type": "kg_parser",
+      "type": "enhanced_kg_parser",
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {
@@ -80,7 +79,7 @@ local learning_rate = 0.001;
       "grad_norm": 5.0,
       "patience": 50,
       "cuda_device": 0,
-      "validation_metric": "+LAS",
+      "validation_metric": "+labeled_f1",
       "num_gradient_accumulation_steps": 32,
       "optimizer": {
         "type": "dense_sparse_adam",
