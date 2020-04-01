@@ -5,13 +5,12 @@ from operator import itemgetter
 
 from overrides import overrides
 import torch
-from torch.nn.modules import Dropout
+from torch.nn.modules import Dropout, Linear
 import numpy
 
 from allennlp.common.checks import check_dimensions_match, ConfigurationError
 from allennlp.data import TextFieldTensors, Vocabulary
 from allennlp.modules import Seq2SeqEncoder, TextFieldEmbedder, Embedding, InputVariationalDropout
-from allennlp.modules.matrix_attention.bilinear_matrix_attention import BilinearMatrixAttention
 from allennlp.modules import FeedForward
 from allennlp.models.model import Model
 from allennlp.nn import InitializerApplicator, Activation
@@ -23,15 +22,11 @@ from tagging.training.enhanced_attachment_scores import EnhancedAttachmentScores
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-@Model.register("enhanced_dm_parser")
-class EnhancedDMParser(Model):
+@Model.register("enhanced_kg_parser")
+class EnhancedKGParser(Model):
     """
-    A Parser for arbitrary graph structures.
-    This enhanced dependency parser follows the model of
-    ` Deep Biaffine Attention for Neural Dependency Parsing (Dozat and Manning, 2016)
-    <https://arxiv.org/abs/1611.01734>`_ .
-    
-    Registered as a `Model` with name "graph_parser".
+    A Parser for arbitrary graph structures using a similar scoring model to Kiperwasser and Goldberg (2016).
+    Registered as a `Model` with name "enhanced_kg_parser".
     # Parameters
     vocab : `Vocabulary`, required
         A Vocabulary, required in order to compute sizes for input/output projections.
@@ -62,7 +57,6 @@ class EnhancedDMParser(Model):
     initializer : `InitializerApplicator`, optional (default=`InitializerApplicator()`)
         Used to initialize the model parameters.
     """
-    
     def __init__(
         self,
         vocab: Vocabulary,
@@ -70,6 +64,7 @@ class EnhancedDMParser(Model):
         encoder: Seq2SeqEncoder,
         tag_representation_dim: int,
         arc_representation_dim: int,
+        activation = Activation.by_name("tanh")(),
         tag_feedforward: FeedForward = None,
         arc_feedforward: FeedForward = None,
         pos_tag_embedding: Embedding = None,
@@ -79,10 +74,11 @@ class EnhancedDMParser(Model):
         initializer: InitializerApplicator = InitializerApplicator(),
         **kwargs,
     ) -> None:
-        super().__init__(vocab, **kwargs)    
-
+        super().__init__(vocab, **kwargs)
+        
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
+        self.activation = activation
         self.edge_prediction_threshold = edge_prediction_threshold
         if not 0 < edge_prediction_threshold < 1:
             raise ConfigurationError(f"edge_prediction_threshold must be between "
@@ -90,36 +86,34 @@ class EnhancedDMParser(Model):
 
         encoder_dim = encoder.get_output_dim()
 
+        # edge FeedForward
         self.head_arc_feedforward = arc_feedforward or FeedForward(
-            encoder_dim, 1, arc_representation_dim, Activation.by_name("elu")()
+            encoder_dim, 1, arc_representation_dim, Activation.by_name("tanh")()
         )
         self.child_arc_feedforward = copy.deepcopy(self.head_arc_feedforward)
-
-        self.arc_attention = BilinearMatrixAttention(
-            arc_representation_dim, arc_representation_dim, use_input_biases=True
-        )
-
-        num_labels = self.vocab.get_vocab_size("labels")
+        
+        # label FeedForward
         self.head_tag_feedforward = tag_feedforward or FeedForward(
-            encoder_dim, 1, tag_representation_dim, Activation.by_name("elu")()
+            encoder_dim, 1, tag_representation_dim, Activation.by_name("tanh")()
         )
         self.child_tag_feedforward = copy.deepcopy(self.head_tag_feedforward)
-
-        self.tag_bilinear = BilinearMatrixAttention(
-            tag_representation_dim, tag_representation_dim, label_dim=num_labels
-        )
-
+        
+        num_labels = self.vocab.get_vocab_size("labels")
+        
+        self.arc_out_layer = Linear(arc_representation_dim, 1)
+        self.tag_out_layer = Linear(arc_representation_dim, num_labels)
+    
         self._pos_tag_embedding = pos_tag_embedding or None
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
-
-        # add a head sentinel to accommodate for extra root token in EUD graphs
+        
+        # add a head sentinel to accommodate for extra root token
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
-
+            
         representation_dim = text_field_embedder.get_output_dim()
         if pos_tag_embedding is not None:
             representation_dim += pos_tag_embedding.get_output_dim()
-
+        
         check_dimensions_match(
             representation_dim,
             encoder.get_input_dim(),
@@ -140,11 +134,11 @@ class EnhancedDMParser(Model):
             "arc representation dim",
             "arc feedforward output dim",
         )
-
+        
         self._enhanced_attachment_scores = EnhancedAttachmentScores()
         
         self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction="none")
-        self._tag_loss = torch.nn.CrossEntropyLoss(reduction="none")
+        self._tag_loss = torch.nn.CrossEntropyLoss(reduction="none")        
         initializer(self)
 
     @overrides
@@ -180,43 +174,62 @@ class EnhancedDMParser(Model):
             embedded_text_input = torch.cat([embedded_text_input, embedded_pos_tags], -1)
         elif self._pos_tag_embedding is not None:
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
-
-        mask = get_text_field_mask(tokens)
+            
+        mask = get_text_field_mask(tokens)    
         embedded_text_input = self._input_dropout(embedded_text_input)
         encoded_text = self.encoder(embedded_text_input, mask)
-
-
-        batch_size, _, encoding_dim = encoded_text.size()
-
+        
+        batch_size, sequence_length, encoding_dim = encoded_text.size()
+        
         head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
         # Concatenate the head sentinel onto the sentence representation.
         encoded_text = torch.cat([head_sentinel, encoded_text], 1)
-        mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
         encoded_text = self._dropout(encoded_text)
         
+        mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
+                
         # shape (batch_size, sequence_length, arc_representation_dim)
-        head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
-        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))        
+        # NOTE: no dropout in KG
+        head_arc_representation = self.head_arc_feedforward(encoded_text)
+        child_arc_representation = self.child_arc_feedforward(encoded_text)
         
-        # shape (batch_size, sequence_length, tag_representation_dim)
-        head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
-        child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
+        # shape (batch_size, sequence_length, tag_representation_dim)        
+        head_tag_representation = self.head_tag_feedforward(encoded_text)
+        child_tag_representation = self.child_tag_feedforward(encoded_text)
+         
+        # calculate dimensions again as sequence_length is now + 1 from adding the head_sentinel
+        batch_size, sequence_length, arc_dim = head_arc_representation.size()
+        
+        # now repeat the token representations to form a matrix so that every possible head-dep pair is considered:
+        # shape (batch_size, sequence_length, sequence_length, arc_representation_dim)
+        heads = head_arc_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, arc_dim) # heads in one direction
+        deps = child_arc_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, arc_dim).transpose(1, 2) # deps in the other direction  
+        
+        # shape (batch_size, sequence_length, sequence_length, arc_representation_dim)
+        combined_arcs = self.activation(heads + deps)
 
         # shape (batch_size, sequence_length, sequence_length)
-        arc_scores = self.arc_attention(head_arc_representation, child_arc_representation)
-        
-        # shape (batch_size, num_tags, sequence_length, sequence_length)
-        arc_tag_logits = self.tag_bilinear(head_tag_representation, child_tag_representation)
+        arc_scores = self.arc_out_layer(combined_arcs).squeeze(3)
 
-        # Switch to (batch_size, sequence_length, sequence_length, num_tags)
-        arc_tag_logits = arc_tag_logits.permute(0, 2, 3, 1).contiguous()
+        batch_size, sequence_length, tag_dim = head_tag_representation.size()        
         
+        # now repeat the token representations to form a matrix so that every possible head-dep pair is considered:
+        # shape (batch_size, sequence_length, sequence_length, tag_representation_dim)
+        head_tags = head_tag_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, tag_dim) # heads in one direction
+        child_tags = child_tag_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, tag_dim).transpose(1, 2) # deps in the other direction
+
+        # shape (batch_size, sequence_length, sequence_length, label_representation_dim)
+        combined_tags = self.activation(head_tags + child_tags)
+
+        # shape (batch_size, sequence_length, sequence_length, num_labels)
+        arc_tag_logits = self.tag_out_layer(combined_tags).squeeze(3)
+
         # Since we'll be doing some additions, using the min value will cause underflow
         minus_mask = ~mask * min_value_of_dtype(arc_scores.dtype) / 10
         arc_scores = arc_scores + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
-
+        
         arc_probs, arc_tag_probs = self._greedy_decode(arc_scores, arc_tag_logits, mask)
-
+        
         output_dict = {"arc_probs": arc_probs, "arc_tag_probs": arc_tag_probs, "mask": mask}
 
         if metadata:
@@ -234,7 +247,7 @@ class EnhancedDMParser(Model):
             output_dict["loss"] = arc_nll + tag_nll
             output_dict["arc_loss"] = arc_nll
             output_dict["tag_loss"] = tag_nll
-                
+
             # get human readable output to computed enhanced graph metrics
             output_dict = self.make_output_human_readable(output_dict)
             
@@ -248,13 +261,11 @@ class EnhancedDMParser(Model):
             gold_arc_tags = [meta["arc_tags"] for meta in metadata]
             gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
             
-            
             tag_mask = mask.unsqueeze(1) & mask.unsqueeze(2)
             self._enhanced_attachment_scores(predicted_arcs, predicted_arc_tags, predicted_labeled_arcs, \
                                              gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
-            
-        return output_dict
 
+        return output_dict        
 
     @overrides
     def make_output_human_readable(
@@ -294,12 +305,13 @@ class EnhancedDMParser(Model):
                         # append ((h,m), label) tuple
                         edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "labels")))
                         found_heads[j] = True
-            
+                                                
             # some words won't have found heads so we will find the edge with the highest probability for each unassigned word
+            # could lower the threshold for these cases or else just do the max
             head_information = found_heads.items()
             unassigned_tokens = []
             for (word, has_found_head) in head_information:
-                # we're not interested in selecting heads for the dummy ROOT token
+                # not interested in selecting heads for the dummy ROOT token
                 if has_found_head == False and word != 0:
                     unassigned_tokens.append(word)
                                 
@@ -327,12 +339,14 @@ class EnhancedDMParser(Model):
             arcs.append(edges)
             arc_tags.append(edge_tags)
             labeled_arcs.append(edges_and_tags)                        
-        
+                        
+                        
         output_dict["arcs"] = arcs
         output_dict["arc_tags"] = arc_tags
         output_dict["labeled_arcs"] = labeled_arcs
         return output_dict
-    
+
+
     def _construct_loss(
         self,
         arc_scores: torch.Tensor,
@@ -387,6 +401,7 @@ class EnhancedDMParser(Model):
         tag_nll = tag_nll.sum() / valid_positions.float()
         return arc_nll, tag_nll
 
+
     @staticmethod
     def _greedy_decode(
         arc_scores: torch.Tensor, arc_tag_logits: torch.Tensor, mask: torch.BoolTensor
@@ -413,7 +428,7 @@ class EnhancedDMParser(Model):
             A tensor of shape (batch_size, sequence_length, sequence_length) representing the
             probability of an arc being present for this edge.
         arc_tag_probs : `torch.Tensor`
-            A tensor of shape (batch_size, sequence_length, sequence_length, sequence_length)
+            A tensor of shape (batch_size, sequence_length, sequence_length, num_tags)
             representing the distribution over edge tags for a given edge.
         """
         # Mask the diagonal, because we don't self edges.
@@ -442,3 +457,4 @@ class EnhancedDMParser(Model):
                 metrics[metric] = value
                 
         return metrics
+        
