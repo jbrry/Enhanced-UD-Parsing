@@ -4,12 +4,16 @@ test -z $1 && echo "Missing task type <basic> or <enhanced>"
 test -z $1 && exit 1
 TASK=$1
 
-test -z $2 && echo "Missing list of TBIDs (space or colon-separated)"
+test -z $2 && echo "Missing model type <dm> or <kg>"
 test -z $2 && exit 1
-TBIDS=$(echo $2 | tr ':' ' ')
+MODEL_TYPE=$2
 
-# official shared-task data
-TB_DIR=data/train-dev
+test -z $3 && echo "Missing list of TBIDs (space or colon-separated)"
+test -z $3 && exit 1
+TBIDS=$(echo $3 | tr ':' ' ')
+
+# official shared-task data (filtered contains treebanks with long sentences removed.)
+TB_DIR=data/train-dev-filtered
 
 TIMESTAMP=`date "+%Y%m%d-%H%M%S"` 
 
@@ -27,7 +31,7 @@ for tbid in $TBIDS ; do
   export DEV_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-dev.conllu
   export TEST_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-test.conllu
 
-  allennlp train configs/ud_${TASK}.jsonnet -s logs/${tbid}-${TASK}-${TIMESTAMP} --include-package tagging
+  allennlp train configs/ud_${TASK}_${MODEL_TYPE}.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-${TIMESTAMP} --include-package tagging
   done
 done
 
