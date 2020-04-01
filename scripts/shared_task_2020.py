@@ -23,6 +23,7 @@ import random
 import string
 import sys
 import time
+from collections import defaultdict
 
 import utilities
 
@@ -252,15 +253,19 @@ Options:
         self.configs = {}
         for tbid in sorted(list(self.task_treebanks.keys())):
             tb_info = self.task_treebanks[tbid]
-            tbdir, training_data, tbid_needs_models, prediction_tasks = tb_info
+            _, _, tbid_needs_models, _, _ = tb_info
             if not tbid_needs_models:
                 continue
             if self.debug:
                 print('Preparing configurations for TBID', tbid)
+                prediction_tasks = tb_info[3]
                 print('%d prediction tasks:' %len(prediction_tasks))
                 for item in sorted(prediction_tasks):
                     print('\t\t', item)
+                training_data = tb_info[1]
                 print('Training data:', training_data)
+                dev_conllu = tb_info[4]
+                print('Dev data:', dev_conllu)
             lcode = tbid.split('_')[0]
             # Find the most specific config available
             # TODO: Add language family as a layer between
@@ -302,6 +307,7 @@ Options:
 
     def train_missing_models(self):
         tasks = []
+        self.in_progress = set()
         for tbid in sorted(list(self.configs.keys())):
             for config in self.configs[tbid]:
                 if not config.is_operational():
@@ -577,9 +583,12 @@ class Config_default:
         parsers = self.variant[1]
         if not parsers:
             print('Warning: No parser found that supports', self.lcode)
+        p_name2p_index = defaultdict(lambda: 0)
         for index in range(self.get_basic_parser_ensemble_size()):
             round_robin_choice = parsers[index % len(parsers)]
-            self.basic_parsers.append(round_robin_choice)
+            p_index = p_name2p_index[round_robin_choice]
+            p_name2p_index[round_robin_choice] = p_index + 1
+            self.basic_parsers.append((round_robin_choice, p_index))
 
     def init_enhanced_parser(self):
         self.enhanced_parser = self.variant[2]
@@ -610,7 +619,7 @@ class Config_default:
         return tasks
 
     def train_missing_segmenter_model(self):
-        segmenter_module, datasets = self.variant[0].split(':', 1)
+        segmenter_module, datasets = self.segmenter.split(':', 1)
         segmenter = importlib.import_module(segmenter_module)
         if self.options.debug:
             print('Training %s with seed %s and data %s' %(
@@ -627,10 +636,7 @@ class Config_default:
 
     def train_missing_basic_parser_models(self):
         tasks = []
-        p_name2p_index = defaultdict(lambda: 0)
-        for p_name in self.variant[1]:
-            p_index = p_name2p_index[p_name]
-            p_name2p_index[p_name] = p_index + 1
+        for p_name, p_index in self.basic_parsers:
             p_module_name, datasets = p_name.split(':', 1)
             basic_parser = importlib.import_module(p_module_name)
             init_seed = '%s%02d' %(self.options.init_seed, p_index)
@@ -647,7 +653,7 @@ class Config_default:
         return tasks
 
     def train_missing_enhanced_parser_model(self):
-        enhanced_module, datasets = self.variant[2].split(':', 1)
+        enhanced_module, datasets = self.enhanced_parser.split(':', 1)
         enhanced_parser = importlib.import_module(enhanced_module)
         if self.options.debug:
             print('Training %s with seed %s and data %s' %(

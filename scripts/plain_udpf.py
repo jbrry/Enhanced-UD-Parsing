@@ -77,7 +77,12 @@ def train(
         command.append('')
     for i in range(2):
         if len(monitoring_datasets) > i:
-            command.append(monitoring_datasets[i].filename)
+            conllu_file = monitoring_datasets[i]
+            if type(conllu_file) is tuple:
+                conllu_file = conllu_file[0]
+            if type(conllu_file) is not str:
+                conllu_file = conllu_file.filename
+            command.append(conllu_file)
     task = common_udpipe_future.run_command(
         command,
         priority = 200+priority,

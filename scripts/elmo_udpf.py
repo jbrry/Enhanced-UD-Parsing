@@ -67,6 +67,7 @@ def train_model_if_missing(lcode, init_seed, datasets, options):
     return train(
         tr_data_filename, init_seed, model_dir,
         monitoring_datasets = monitoring_datasets,
+        lcode = lcode,
         epochs = epochs,
         priority = 20,
         is_multi_treebank = '+' in datasets,
@@ -1105,7 +1106,7 @@ def train(
         raise ValueError('Epoch selection not supported with udpipe-future.')
     npz_tasks = NPZTasks(model_dir, lcode, priority = priority)
     command = []
-    command.append('./elmo_udpf-train.sh')
+    command.append('scripts/elmo_udpf-train.sh')
     command.append(dataset_filename)
     command.append(npz_tasks.append(dataset_filename))
     #command.append(lcode)
@@ -1134,7 +1135,7 @@ def train(
     task = common_udpipe_future.run_command(
         command,
         requires = npz_tasks.get_npz_files(),
-        priority = priority,
+        priority = 200+priority,
         submit_and_return = submit_and_return,
         cleanup = npz_tasks,
     )
@@ -1178,7 +1179,7 @@ def predict(
     # prepare npz files and parser command
     command = []
     npz_tasks = NPZTasks(prediction_output_path, lcode, priority = priority)
-    command.append('./elmo_udpf-predict.sh')
+    command.append('scripts/elmo_udpf-predict.sh')
     command.append(model_path)
     command.append(input_path)
     command.append(npz_tasks.append(input_path))
@@ -1194,7 +1195,7 @@ def predict(
     common_udpipe_future.run_command(
         command,
         requires = requires,
-        priority = priority,
+        priority = 100+priority,
         submit_and_return = submit_and_return,
         cleanup = npz_tasks,
     )

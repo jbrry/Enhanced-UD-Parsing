@@ -214,7 +214,7 @@ class Task:
                 break
             except KeyError:
                 pass
-        task_id = utilities.bstring('%02d-%05x-%s-%s-%d-%s-%s' %(
+        task_id = utilities.bstring('%03d-%05x-%s-%s-%d-%s-%s' %(
             self.priority,
             int((time.time()-t0)/60.0),
             hostname,

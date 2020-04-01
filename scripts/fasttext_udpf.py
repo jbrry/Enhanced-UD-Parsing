@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 import common_udpipe_future
+import utilities
 
 def supports_lcode(lcode):
     return os.path.exists('%s/fasttext-%s.npz' %(
@@ -43,6 +44,7 @@ def train_model_if_missing(lcode, init_seed, datasets, options):
         return None
     return train(
         tr_data_filename, init_seed, model_dir,
+        lcode = lcode,
         monitoring_datasets = monitoring_datasets,
         epochs = epochs,
         priority = 20,
@@ -62,11 +64,11 @@ def train(
     submit_and_return = False,
 ):
     if lcode is None:
-        raise ValueError('Missing lcode; use --module-keyword to specify a key-value pair')
+        raise ValueError('Missing lcode for training parser with fasttext word embedding')
     if epoch_selection_dataset:
         raise ValueError('Epoch selection not supported with udpipe-future.')
     command = []
-    command.append('./fasttext_udpf-train.sh')
+    command.append('scripts/fasttext_udpf-train.sh')
     command.append(dataset_filename)
     if seed is None:
         raise NotImplementedError
@@ -89,7 +91,7 @@ def train(
             command.append(conllu_file)
     task = common_udpipe_future.run_command(
         command,
-        priority = priority,
+        priority = 200+priority,
         submit_and_return = submit_and_return,
     )
     if submit_and_return:
@@ -119,7 +121,7 @@ def predict(
     wait_for_model = False,
 ):
     command = []
-    command.append('./fasttext_udpf-predict.sh')
+    command.append('scripts/fasttext_udpf-predict.sh')
     command.append(model_path)
     command.append(input_path)
     command.append(prediction_output_path)
@@ -133,7 +135,7 @@ def predict(
     task = common_udpipe_future.run_command(
         command,
         requires = requires,
-        priority = priority,
+        priority = 100+priority,
         submit_and_return = submit_and_return,
     )
     if submit_and_return:

@@ -252,6 +252,8 @@ def get_conllu_and_text_for_dataset(dataset, options, dataset_partition = 'train
         raise ValueError('Unknown dataset type %r in %r' %(dataset_type, dataset))
     if dataset_partition == 'dev':
         dev_conllu = tb_info[4]
+        if dev_conllu is None:
+            return None, None
         # https://stackoverflow.com/questions/2556108/rreplace-how-to-replace-the-last-occurrence-of-an-expression-in-a-string
         dev_txt = '.txt'.join(dev_conllu.rsplit('.conllu', 1))
         return dev_conllu, dev_txt
@@ -267,7 +269,8 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
     model_dir = get_model_dir(
         module_name, lcode, init_seed, datasets, options,
     )
-    if os.path.exists(model_dir):
+    if os.path.exists(model_dir) \
+    or model_dir in options.in_progress:
         return None, None, None, None
     tr_data_filename, n_tokens = get_conllu_concat_filename_and_size(
         lcode, datasets, options, 'train',
@@ -276,15 +279,14 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
         raise ValueError('Could not find conllu for %s' %datasets)
     monitoring_datasets = []
     for test_partition in ('dev',):  # testing on 'test' not allowed in shared task
-        test_data_path, _ = monitoring_datasets.append(
-            get_conllu_concat_filename_and_size(
-                lcode, datasets, options, test_partition,
-            )
+        test_data_path, _ = get_conllu_concat_filename_and_size(
+            lcode, datasets, options, test_partition,
         )
         if test_data_path:
             monitoring_datasets.append(test_data_path)
     epochs = 60
     while epochs * n_tokens > max_tr_tokens and epochs > 6:
         epochs -= 1
+    options.in_progress.add(model_dir)
     return tr_data_filename, monitoring_datasets, model_dir, epochs
 
