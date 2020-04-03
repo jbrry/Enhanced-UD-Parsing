@@ -11,7 +11,7 @@ test -z $2 && echo "Missing model type <dm> or <kg>"
 test -z $2 && exit 1
 MODEL_TYPE=$2
 
-test -z $3 && echo "Missing job group number <1:5>"
+test -z $3 && echo "Missing job group number <1:5> or <X> for specific job"
 test -z $3 && exit 1
 JOB=$3
 
@@ -23,6 +23,9 @@ JOB_3="cs_cac nl_alpino sk_snk lt_alksnis"
 JOB_4="pl_pdb fi_tdt ar_padt fr_sequoia"
 JOB_5="pl_lfg cs_fictree nl_lassysmall et_ewt"
 
+# append specific tbids here
+JOB_X="cs_cac cs_pdt it_isdt ru_syntagrus"
+
 if [ $JOB == 1 ]; then
   JOB_GROUP=$JOB_1
 elif [ $JOB == 2 ]; then
@@ -33,6 +36,8 @@ elif [ $JOB == 4 ]; then
   JOB_GROUP=$JOB_4
 elif [ $JOB == 5 ]; then
   JOB_GROUP=$JOB_5
+elif [ $JOB == "X" ]; then
+  JOB_GROUP=$JOB_X
 fi 
        
 for TBID in "${JOB_GROUP[*]}"; do
