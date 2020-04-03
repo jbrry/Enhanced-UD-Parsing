@@ -72,7 +72,7 @@ class EnhancedDMParser(Model):
         arc_representation_dim: int,
         tag_feedforward: FeedForward = None,
         arc_feedforward: FeedForward = None,
-        pos_tag_embedding: Embedding = None,
+        upos_tag_embedding: Embedding = None,
         dropout: float = 0.0,
         input_dropout: float = 0.0,
         edge_prediction_threshold: float = 0.5,
@@ -109,7 +109,7 @@ class EnhancedDMParser(Model):
             tag_representation_dim, tag_representation_dim, label_dim=num_labels
         )
 
-        self._pos_tag_embedding = pos_tag_embedding or None
+        self._upos_tag_embedding = upos_tag_embedding or None
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
 
@@ -117,8 +117,8 @@ class EnhancedDMParser(Model):
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
 
         representation_dim = text_field_embedder.get_output_dim()
-        if pos_tag_embedding is not None:
-            representation_dim += pos_tag_embedding.get_output_dim()
+        if upos_tag_embedding is not None:
+            representation_dim += upos_tag_embedding.get_output_dim()
 
         check_dimensions_match(
             representation_dim,
@@ -151,7 +151,10 @@ class EnhancedDMParser(Model):
     def forward(
         self,  # type: ignore
         tokens: TextFieldTensors,
-        pos_tags: torch.LongTensor = None,
+        upos: torch.LongTensor = None,
+        xpos: torch.LongTensor = None,
+        feats: torch.LongTensor = None,
+        lemmas: torch.LongTensor = None,
         metadata: List[Dict[str, Any]] = None,
         enhanced_tags: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
@@ -175,10 +178,10 @@ class EnhancedDMParser(Model):
         An output dictionary.
         """
         embedded_text_input = self.text_field_embedder(tokens)
-        if pos_tags is not None and self._pos_tag_embedding is not None:
-            embedded_pos_tags = self._pos_tag_embedding(pos_tags)
-            embedded_text_input = torch.cat([embedded_text_input, embedded_pos_tags], -1)
-        elif self._pos_tag_embedding is not None:
+        if upos is not None and self._upos_tag_embedding is not None:
+            embedded_upos_tags = self._upos_tag_embedding(upos)
+            embedded_text_input = torch.cat([embedded_text_input, embedded_upos_tags], -1)
+        elif self._upos_tag_embedding is not None:
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
 
         mask = get_text_field_mask(tokens)

@@ -48,9 +48,9 @@ local learning_rate = 0.001;
            }
         },
       },
-      "pos_tag_embedding":{
+      "upos_tag_embedding":{
         "embedding_dim": pos_embedding_dim,
-        "vocab_namespace": "pos",
+        "vocab_namespace": "upos",
         "sparse": true
       },
       "encoder": {
