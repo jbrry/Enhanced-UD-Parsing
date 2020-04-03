@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 @Model.register("enhanced_kg_parser")
 class EnhancedKGParser(Model):
     """
-    A Parser for arbitrary graph structures using a similar scoring model to Kiperwasser and Goldberg (2016).
+    A Parser for arbitrary graph structures using the scoring model of Kiperwasser and Goldberg (2016).
+    Based on the implementation in: https://github.com/coli-saar/am-parser
+    At the moment, the parser doesn't use cost-augmentation or hinge-loss.
     Registered as a `Model` with name "enhanced_kg_parser".
     # Parameters
     vocab : `Vocabulary`, required
@@ -35,16 +37,6 @@ class EnhancedKGParser(Model):
     encoder : `Seq2SeqEncoder`
         The encoder (with its own internal stacking) that we will use to generate representations
         of tokens.
-    tag_representation_dim : `int`, required.
-        The dimension of the MLPs used for arc tag prediction.
-    arc_representation_dim : `int`, required.
-        The dimension of the MLPs used for arc prediction.
-    tag_feedforward : `FeedForward`, optional, (default = None).
-        The feedforward network used to produce tag representations.
-        By default, a 1 layer feedforward network with an elu activation is used.
-    arc_feedforward : `FeedForward`, optional, (default = None).
-        The feedforward network used to produce arc representations.
-        By default, a 1 layer feedforward network with an elu activation is used.
     pos_tag_embedding : `Embedding`, optional.
         Used to embed the `pos_tags` `SequenceLabelField` we get as input to the model.
     dropout : `float`, optional, (default = 0.0)
@@ -86,21 +78,17 @@ class EnhancedKGParser(Model):
 
         encoder_dim = encoder.get_output_dim()
 
-        # edge FeedForward
-        self.head_arc_feedforward = arc_feedforward or FeedForward(
-            encoder_dim, 1, arc_representation_dim, Activation.by_name("tanh")()
-        )
-        self.child_arc_feedforward = copy.deepcopy(self.head_arc_feedforward)
+        # these two matrices together form the feed forward network which takes the vectors of the two words in question and makes predictions from that
+        # this is the trick described by Kiperwasser and Goldberg to make training faster.
+        self.edge_head = Linear(encoder_dim, arc_representation_dim)
+        self.edge_dep = Linear(encoder_dim, arc_representation_dim, bias=False) # bias is already added by edge_head
         
-        # label FeedForward
-        self.head_tag_feedforward = tag_feedforward or FeedForward(
-            encoder_dim, 1, tag_representation_dim, Activation.by_name("tanh")()
-        )
-        self.child_tag_feedforward = copy.deepcopy(self.head_tag_feedforward)
+        self.tag_head = Linear(encoder_dim, tag_representation_dim)
+        self.tag_dep = Linear(encoder_dim, tag_representation_dim, bias=False)
         
         num_labels = self.vocab.get_vocab_size("labels")
         
-        self.arc_out_layer = Linear(arc_representation_dim, 1)
+        self.arc_out_layer = Linear(arc_representation_dim, 1, bias=False) # no bias in output layer of K&G model
         self.tag_out_layer = Linear(arc_representation_dim, num_labels)
     
         self._pos_tag_embedding = pos_tag_embedding or None
@@ -119,20 +107,6 @@ class EnhancedKGParser(Model):
             encoder.get_input_dim(),
             "text field embedding dim",
             "encoder input dim",
-        )
-        
-        check_dimensions_match(
-            tag_representation_dim,
-            self.head_tag_feedforward.get_output_dim(),
-            "tag representation dim",
-            "tag feedforward output dim",
-        )
-        
-        check_dimensions_match(
-            arc_representation_dim,
-            self.head_arc_feedforward.get_output_dim(),
-            "arc representation dim",
-            "arc feedforward output dim",
         )
         
         self._enhanced_attachment_scores = EnhancedAttachmentScores()
@@ -189,13 +163,12 @@ class EnhancedKGParser(Model):
         mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
                 
         # shape (batch_size, sequence_length, arc_representation_dim)
-        # NOTE: no dropout in KG
-        head_arc_representation = self.head_arc_feedforward(encoded_text)
-        child_arc_representation = self.child_arc_feedforward(encoded_text)
+        head_arc_representation = self.edge_head(encoded_text)
+        child_arc_representation = self.edge_dep(encoded_text)
         
         # shape (batch_size, sequence_length, tag_representation_dim)        
-        head_tag_representation = self.head_tag_feedforward(encoded_text)
-        child_tag_representation = self.child_tag_feedforward(encoded_text)
+        head_tag_representation = self.tag_head(encoded_text)
+        child_tag_representation = self.tag_dep(encoded_text)
          
         # calculate dimensions again as sequence_length is now + 1 from adding the head_sentinel
         batch_size, sequence_length, arc_dim = head_arc_representation.size()
