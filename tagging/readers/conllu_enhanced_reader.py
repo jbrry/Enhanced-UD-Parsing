@@ -265,10 +265,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             enhanced_arc_tags, enhanced_arc_indices = self._convert_deps_to_nested_sequences(deps)
             # extra processing is needed if a sentence contains an elided token
             if self.contains_elided_token == True:
-                print(enhanced_arc_indices)
                 original_to_new_indices, augmented_heads = self._process_elided_tokens(ids, enhanced_arc_indices)
-                print(original_to_new_indices)
-                print(augmented_heads)
                 enhanced_arc_indices = augmented_heads
             else:
                 original_to_new_indices = None
