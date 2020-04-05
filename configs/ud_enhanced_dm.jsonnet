@@ -2,13 +2,14 @@ local word_embedding_dim = 100;
 local char_embedding_dim = 64;
 local pos_embedding_dim = 100;
 local embedding_dim = word_embedding_dim + pos_embedding_dim + char_embedding_dim + char_embedding_dim;
-local hidden_dim = 600;
-local num_epochs = 50;
+local hidden_dim = 400;
 local patience = 10;
-local batch_size = 16;
 local learning_rate = 0.001;
 
 {
+  "random_seed":  std.parseInt(std.extVar("RANDOM_SEED")),
+  "pytorch_seed": std.parseInt(std.extVar("PYTORCH_SEED")),
+  "numpy_seed": std.parseInt(std.extVar("NUMPY_SEED")),
   "dataset_reader":{
     "type":"universal_dependencies_enhanced",
       "token_indexers": {
@@ -44,7 +45,7 @@ local learning_rate = 0.001;
                "hidden_size": char_embedding_dim,
                "num_layers": 2,
                "bidirectional": true
-               }
+             }
            }
         },
       },
@@ -70,17 +71,17 @@ local learning_rate = 0.001;
       "batch_sampler": {
         "type": "bucket",
         "sorting_keys": ["tokens"],
-        "batch_size": batch_size
+        "batch_size": std.parseInt(std.extVar("BATCH_SIZE"))
       }
     },
     "evaluate_on_test": false,
     "trainer": {
-      "num_epochs": num_epochs,
+      "num_epochs": std.parseInt(std.extVar("NUM_EPOCHS")),
       "grad_norm": 5.0,
-      "patience": 50,
-      "cuda_device": 0,
+      "patience": 10,
+      "cuda_device": std.parseInt(std.extVar("CUDA_DEVICE")),
       "validation_metric": "+labeled_f1",
-      "num_gradient_accumulation_steps": 32,
+      "num_gradient_accumulation_steps": std.parseInt(std.extVar("GRAD_ACCUM_BATCH_SIZE")),
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]

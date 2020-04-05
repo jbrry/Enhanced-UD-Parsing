@@ -11,9 +11,13 @@ test -z $2 && echo "Missing model type <dm> or <kg>"
 test -z $2 && exit 1
 MODEL_TYPE=$2
 
-test -z $3 && echo "Missing job group number <A:F>"
+test -z $3 && echo "Missing job group <A:F>"
 test -z $3 && exit 1
 JOB=$3
+
+test -z $4 && echo "Missing seed number"
+test -z $4 && exit 1
+SEED=$4
 
 # job groups based on training data size distributed in a round-robin fashion.
 # run python utils/get_training_information.py to get training metadata.
@@ -39,10 +43,10 @@ elif [ ${JOB} == "E" ]; then
 elif [ ${JOB} == "F" ]; then
   JOB_GROUP=$JOB_F
 fi 
-       
+
 for TBID in ${JOB_GROUP[@]}; do
     echo "training on ${TBID}"
 
-    bash scripts/train.sh ${TASK} ${MODEL_TYPE} ${TBID}
+    bash scripts/train.sh ${TASK} ${MODEL_TYPE} ${TBID} ${SEED}
 done
 
