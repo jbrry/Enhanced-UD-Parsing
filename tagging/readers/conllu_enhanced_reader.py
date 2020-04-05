@@ -1,3 +1,5 @@
+# feature extraction/MWT processing is based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
+
 from typing import Dict, Tuple, List, Any, Callable
 import logging
 
@@ -6,8 +8,7 @@ from conllu import parse_incr
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import Field, LabelField, ListField, TextField, SequenceLabelField, MetadataField, AdjacencyField
-from tagging.fields.sequence_multilabel_field import SequenceMultiLabelField
+from allennlp.data.fields import Field, LabelField, ListField, TextField, SequenceLabelField, MetadataField
 from tagging.fields.rooted_adjacency_field import RootedAdjacencyField
 from allennlp.data.instance import Instance
 from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
@@ -16,9 +17,11 @@ from allennlp.data.tokenizers import Token, Tokenizer
 logger = logging.getLogger(__name__)
 
 
-def process_multiword_tokens(annotation):
+def process_multiword_and_elided_tokens(annotation):
     """
-    Processes CoNLL-U annotations for multi-word tokens.
+    Processes CoNLL-U ids for multi-word tokens and elided tokens.
+    When a token is a MWT, the id is set to None so the token is not used in the model.
+    Elided token ids are returned as tuples by the conllu library and are converted to a number id here.
     """
     
     for i in range(len(annotation)):
@@ -49,14 +52,10 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
     # Parameters
     token_indexers : ``Dict[str, TokenIndexer]``, optional (default=``{"tokens": SingleIdTokenIndexer()}``)
         The token indexers to be applied to the tokens TextField.
-    use_language_specific_pos : ``bool``, optional (default = False)
-        Whether to use UD POS tags, or to use the language specific POS tags
-        provided in the conllu format.
     tokenizer : ``Tokenizer``, optional, default = None
         A tokenizer to use to split the text. This is useful when the tokens that you pass
         into the model need to have some particular attribute. Typically it is not necessary.
     """
-
     def __init__(
         self,
         token_indexers: Dict[str, TokenIndexer] = None,
@@ -70,16 +69,16 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         self.tokenizer = tokenizer
 
 
-    def _convert_deps_to_nested_sequences(self, ids, deps):
+    def _convert_deps_to_nested_sequences(self, deps):
         """
-        Converts a series of deps labels into head-lists and relation-lists respectively.
+        Converts a series of deps labels into relation-lists and head-lists respectively.
 
         # Parameters
         deps : ``List[List[Tuple[str, int]]]``
             The enhanced dependency relations.
         
         # Returns
-        List-of-lists containing the enhanced tags and heads respectively.
+        List-of-lists containing the enhanced tags and heads.
         """
         rels = []
         heads = []
@@ -107,11 +106,11 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
     def _process_elided_tokens(self, ids, heads):
         """
-        Processes copy nodes to float values.
-        
-        If the sentence contains elided tokens, we create a dictionary which maps the original CoNLL-U indices to 
-        indices based on the order they appear in the sentence. This means that when an elided token is encountered, e.g. "8.1",
-        we map it to index 9 and offset every other index following this token by +1.
+        Changes elided token format from tuples to float values.
+        We create a dictionary which maps the original CoNLL-U indices to 
+        indices based on the order they appear in the sentence.
+        This means that when an elided token is encountered, e.g. "8.1",
+        we map the index to "9" and offset every other index following this token by +1.
         This process is done every time an elided token is encountered.
         At decoding the time, the (head:dependent) tuples are converted back to the original indices.
         
@@ -139,7 +138,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     copy_node = float(copy_node)
                     current_heads.append(copy_node)
                 else:
-                    # regular head index
+                    # regular head id
                     current_heads.append(head)
             processed_heads.append(current_heads)
         
@@ -167,13 +166,13 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             
             for annotation in parse_incr(conllu_file):
                 self.contains_elided_token = False
-                annotation = process_multiword_tokens(annotation)
+                annotation = process_multiword_and_elided_tokens(annotation)
                 multiword_tokens = [x for x in annotation if x["multi_id"] is not None]
                 elided_tokens = [x for x in annotation if x["elided_id"] is not None]
                 if len(elided_tokens) >= 1:
                     self.contains_elided_token = True
-
-                    
+                
+                # considers all tokens except MWTs for prediction
                 annotation = [x for x in annotation if x["id"] is not None]
                 
                 if len(annotation) == 0:
@@ -194,7 +193,6 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 xpos_tags = get_field("xpostag")
                 feats = get_field("feats", lambda x: "|".join(k + "=" + v for k, v in x.items())
                                      if hasattr(x, "items") else "_")
-
                 heads = get_field("head")
                 dep_rels = get_field("deprel")
                 dependencies = list(zip(dep_rels, heads))
@@ -249,22 +247,28 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             if field:
                 fields[name] = SequenceLabelField(field, token_field, label_namespace=name)        
         
-        #### basic dependency tree
+        # basic dependency tree
         if dependencies is not None:
             head_tags = [x[0] for x in dependencies]
             head_indices = [x[1] for x in dependencies]
-#            fields["head_tags"] = SequenceLabelField(
-#                [x[0] for x in dependencies], token_field, label_namespace="head_tags"
-#            )
-#            fields["head_indices"] = SequenceLabelField(
-#                [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
-#            )
+            # we're not using the basic tree in the parse at the moment
+            # so we are excluding these fields.
+            #fields["head_tags"] = SequenceLabelField(
+            #    [x[0] for x in dependencies], token_field, label_namespace="head_tags"
+            #)
+            #fields["head_indices"] = SequenceLabelField(
+            #    [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
+            #)
         
-        #### enhanced deps
+        # enhanced dependencies
         if deps is not None:
-            enhanced_arc_tags, enhanced_arc_indices = self._convert_deps_to_nested_sequences(ids, deps)
+            enhanced_arc_tags, enhanced_arc_indices = self._convert_deps_to_nested_sequences(deps)
+            # extra processing is needed if a sentence contains an elided token
             if self.contains_elided_token == True:
+                print(enhanced_arc_indices)
                 original_to_new_indices, augmented_heads = self._process_elided_tokens(ids, enhanced_arc_indices)
+                print(original_to_new_indices)
+                print(augmented_heads)
                 enhanced_arc_indices = augmented_heads
             else:
                 original_to_new_indices = None
