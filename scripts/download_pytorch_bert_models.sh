@@ -7,7 +7,7 @@
 TRANSFORMER_DIR=${HOME}/transformer_dir/pytorch_models
 cd $TRANSFORMER_DIR
 
-LANGS="ar bg-cs-pl-ru fi it nl pl sv"
+LANGS="ar bg-cs-pl-ru fi it nl pl ru sv"
 
 for lang in $LANGS;do
   echo "== $lang =="
@@ -27,6 +27,8 @@ for lang in $LANGS;do
     model_path="wietsedv/bert-base-dutch-cased"
   elif [ "${lang}" = "pl" ]; then	  
     model_path="dkleczek/bert-base-polish-uncased-v1"
+  elif [ "${lang}" = "ru" ]; then
+    model_path="DeepPavlov/rubert-base-cased"
   elif [ "${lang}" = "sv" ]; then
     model_path="KB/bert-base-swedish-cased"
   fi
