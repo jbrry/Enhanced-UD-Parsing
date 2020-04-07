@@ -264,7 +264,7 @@ def get_conllu_and_text_for_dataset(dataset, options, dataset_partition = 'train
     training_txt_path = '.txt'.join(training_conllu_path.rsplit('.conllu', 1))
     return training_conllu_path, training_txt_path
 
-def get_training_details(lcode, init_seed, datasets, options, module_name, max_tr_tokens = 24000000):
+def get_training_details(lcode, init_seed, datasets, options, module_name, max_tr_tokens = 60000000):
     assert '.' in datasets
     model_dir = get_model_dir(
         module_name, lcode, init_seed, datasets, options,
@@ -284,7 +284,7 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
         )
         if test_data_path:
             monitoring_datasets.append(test_data_path)
-    epochs = 60
+    epochs = 80
     while epochs * n_tokens > max_tr_tokens and epochs > 6:
         epochs -= 1
     options.in_progress.add(model_dir)
