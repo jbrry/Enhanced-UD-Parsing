@@ -29,6 +29,13 @@ def has_ud25_model_for_tbid(tbid):
 def has_task_model_for_tbid(tbid):
     return False
 
+def train_model_if_missing(lcode, init_seed, datasets, options):
+    # We signal support of training above even though it is not yet
+    # supported here to claim this module's space in the configuration
+    # list.
+    print('Warning: training of udify parser not yet implemented')
+    return None
+
 def main():
     raise NotImplementedError
 
