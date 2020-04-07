@@ -54,9 +54,16 @@ Options:
                             training for more than one component.
                             Specifying a space- or colon-separated list
                             of components is also supported.
+                            The special name ALL is expanded to all 3
+                            component types.
                             Skipping can be restricted to a subcompontent
                             with a dot, e.g. "basic_parser.plain_udpf".
                             (Default: train all missing models)
+
+    --training-only         Quit after training tasks have been submitted.
+                            (Default: Wait for tasks to finish and continue
+                            with prediction and development set
+                            evaluation.)
 
     --workdir  DIR          Path to working directory.
                             Note that some modules require absolute paths.
@@ -92,35 +99,14 @@ Options:
                             per treebank are trained, or 326 otherwise.
                             (Default: 42)
 
-    --training-only         Quit after training tasks have been submitted.
-                            (Default: Wait for tasks to finish and continue
-                            with prediction and development set
-                            evaluation.)
-
     --verbose               More detailed log output
 
-    --tolerant              Use existing models and predictions even when
-                            the training input or model fingerprint does
-                            not match, e.g. because the init seed changed.
-                            In case of multiple matching models or
-                            predictions, use the newest.
-                            (Default: Only re-use models or predictions if
-                            the name matches exactly.)
-
-    --dispense  ACTION      When scanning for models or predictions with
-                            --tolerant, perform ACTION on all candidates
-                            that are not chosen. Actions:
-                                none = do nothing
-                                log  = write "Dispensable:" and the path
-                                rename = add the suffix "-dispensable" to
-                                         the name of the file or folder
-                                delete = delete the model or folder
-                            (Default: none)
 """)
 
     def read_options(self):
         self.final_test = False
         self.modules_not_to_train = set()
+        self.training_only = False
         self.workdir    = None
         self.taskdir    = None
         self.ud25dir    = None
@@ -130,8 +116,6 @@ Options:
         self.init_seed  = 42
         self.verbose    = False
         self.debug      = True
-        self.tolerant   = False
-        self.dispense   = 'none'
         while len(sys.argv) >= 2 and sys.argv[1][:1] == '-':
             option = sys.argv[1]
             option = option.replace('_', '-')
@@ -141,6 +125,8 @@ Options:
             elif option == '--final-test':
                 self.final_test = True
             elif option == '--skip-training':
+                if name == 'ALL':
+                    name = 'segmenter basic_parser enhanced_parser'
                 for name in sys.argv[1].replace(':', ' ').split():
                     self.modules_not_to_train.add(name)
                 del sys.argv[1]
@@ -168,11 +154,6 @@ Options:
                 self.verbose = True
             elif option == '--debug':
                 self.debug = True
-            elif option == '--tolerant':
-                self.tolerant = True
-            elif option == '--dispense':
-                self.dispense = sys.argv[1]
-                del sys.argv[1]
             else:
                 print('Unsupported or not yet implemented option %s' %option)
                 return True
@@ -320,7 +301,7 @@ Options:
         if self.verbose:
             print('Submitted %d training task(s)' %(len(tasks)-tasks.count(None)))
         if self.training_only:
-            sys.exit()
+            return
         utilities.wait_for_tasks(tasks)
 
     def scan_ud25(self):
@@ -402,13 +383,13 @@ class Config_default:
         return ['udpipe_standard', 'udpipe_augmented', 'udpipe_polyglot', 'uusegmenter']
 
     def get_basic_parser_names(self):
-        return ['elmo_udpf', 'fasttext_udpf', 'plain_udpf', 'udify']
+        return ['elmo_udpf', 'udify', 'fasttext_udpf', 'plain_udpf',]
 
     def get_enhanced_parser_names(self):
         return ['enhanced_parser']
 
     def get_basic_parser_ensemble_size(self):
-        return 3
+        return 7
 
     def get_segmenters(self):
         if self.options.debug:
@@ -668,7 +649,8 @@ class Config_default:
         ))
         return tasks
 
-class Config_cs(Config_default):
+
+class Config_with_more_datasets(Config_default):
 
     def get_dataset_names(self):
         tbids_covered = set()
@@ -677,28 +659,34 @@ class Config_cs(Config_default):
                 tbid = dataset.split('.')[1]
                 tbids_covered.add(tbid)
                 yield dataset
-        for tbid in ('cs_cac', 'cs_pdt'):
-            #if tbid not in tbids_covered:
-            yield 'ud25.' + tbid
-
-class Config_en(Config_default):
-
-    def get_dataset_names(self):
-        tbids_covered = set()
-        for dataset in Config_default.get_dataset_names(self):
-            if dataset.startswith('task.'):
-                tbid = dataset.split('.')[1]
+        for tbid, allow_duplicate_tbid in self.get_additional_dataset_tbids():
+            if allow_duplicate_tbid or tbid not in tbids_covered:
+                yield 'ud25.' + tbid
                 tbids_covered.add(tbid)
-                yield dataset
-        for tbid in ('en_ewt', 'en_gum', 'en_lines', 'en_partut'):
-            #if tbid not in tbids_covered:
-            yield 'ud25.' + tbid
+
+class Config_cs(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return ('cs_cac', 'cs_pdt')
+
+class Config_en(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return ('en_ewt', 'en_gum', 'en_lines', 'en_partut')
+
+class Config_ru_syntagrus(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return ('ru_syntagrus', 'ru_gsd', 'ru_taiga')
 
 def main():
     options = Options()
     options.get_tasks_and_configs()
     options.scan_ud25()
     options.train_missing_models()
+    if options.training_only:
+        return
+    options.predict_and_evaluate()
 
 if __name__ == "__main__":
     main()
