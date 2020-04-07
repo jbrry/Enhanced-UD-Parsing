@@ -1,17 +1,24 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 test -z $1 && echo "Missing task type <basic> or <enhanced>"
 test -z $1 && exit 1
 TASK=$1
 
-test -z $2 && echo "Missing list of TBIDs (space or colon-separated)"
+test -z $2 && echo "Missing model type <dm> or <kg>"
 test -z $2 && exit 1
-TBIDS=$(echo $2 | tr ':' ' ')
+MODEL_TYPE=$2
 
-# TODO: iterate over TBIDS and BERT_TYPES simultaneously so this script can run with multiple TBIDS and corresponding BERT models.
-test -z $3 && echo "Missing language code for BERT; currently supports: (ar bg-cs-pl-ru en fi it mbert nl pl sv)"
+test -z $3 && echo "Missing list of TBIDs (space or colon-separated)"
 test -z $3 && exit 1
-BERT_TYPE=$3
+TBIDS=$(echo $3 | tr ':' ' ')
+
+test -z $4 && echo "Missing language code for BERT; currently supports: (ar bg-cs-pl-ru en fi it mbert nl pl ru sv)"
+test -z $4 && exit 1
+BERT_TYPE=$4
+
+test -z $5 && echo "Missing random seed"
+test -z $5 && exit 1
+RANDOM_SEED=$5
 
 # official shared-task data
 TB_DIR=data/train-dev
@@ -19,25 +26,46 @@ TRANSFORMER_DIR=${HOME}/transformer_dir/pytorch_models
 
 TIMESTAMP=`date "+%Y%m%d-%H%M%S"` 
 
+N_SHORT=`echo ${HOSTNAME} | cut -c-5 `
+if [ "${N_SHORT}" = "node0" ]; then
+  echo "loading CUDA"
+  module add cuda10.1
+fi
+
 for tbid in $TBIDS ; do
   echo
   echo "== $tbid =="
   echo
 
+  # seed
+  SEED=$RANDOM_SEED
+  PYTORCH_SEED=`expr $SEED / 10`
+  NUMPY_SEED=`expr $PYTORCH_SEED / 10`
+  export RANDOM_SEED=$SEED
+  export PYTORCH_SEED=$PYTORCH_SEED
+  export NUMPY_SEED=$NUMPY_SEED
+
+  # hyperparams
+  export BATCH_SIZE=8
+  export NUM_EPOCHS=75
+  export CUDA_DEVICE=0
+  export GRAD_ACCUM_BATCH_SIZE=32
+
+
   for filepath in ${TB_DIR}/*/${tbid}-ud-train.conllu; do
-  dir=`dirname $filepath`        # e.g. /home/user/ud-treebanks-v2.2/UD_Afrikaans-AfriBooms
-  tb_name=`basename $dir`        # e.g. UD_Afrikaans-AfriBooms
+    dir=`dirname $filepath`        # e.g. /home/user/ud-treebanks-v2.2/UD_Afrikaans-AfriBooms
+    tb_name=`basename $dir`        # e.g. UD_Afrikaans-AfriBooms
 
-  # ud v2.x
-  export TRAIN_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-train.conllu
-  export DEV_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-dev.conllu
-  export TEST_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-test.conllu
+    # ud v2.x
+    export TRAIN_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-train.conllu
+    export DEV_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-dev.conllu
+    export TEST_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-test.conllu
 
-  # BERT params
-  export BERT_VOCAB=${TRANSFORMER_DIR}/${BERT_TYPE}/vocab.txt
-  export BERT_WEIGHTS=${TRANSFORMER_DIR}/${BERT_TYPE}/weights.tar.gz
+    # BERT params
+    export BERT_VOCAB=${TRANSFORMER_DIR}/${BERT_TYPE}/vocab.txt
+    export BERT_WEIGHTS=${TRANSFORMER_DIR}/${BERT_TYPE}/weights.tar.gz
   
-  allennlp train configs/ud_${TASK}_bert.jsonnet -s logs/${tbid}-${TASK}-${BERT_TYPE}-BERT-${TIMESTAMP} --include-package tagging
+    allennlp train configs/ud_${TASK}_bert_${MODEL_TYPE}.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-${BERT_TYPE}-BERT-${TIMESTAMP} --include-package tagging
   done
 done
 
