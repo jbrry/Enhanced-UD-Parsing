@@ -1,10 +1,12 @@
+# based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/predictors/predictor.py
+
 from typing import Dict, Any, List, Tuple
 from overrides import overrides
+
 from allennlp.common.util import JsonDict, sanitize
 from allennlp.data import DatasetReader, Instance
 from allennlp.models import Model
 from allennlp.predictors.predictor import Predictor
-#from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
 
 sentence_index = 0
 
@@ -20,21 +22,17 @@ class EnhancedPredictor(Predictor):
         super().__init__(model, dataset_reader)
     
     def predict(self, sentence: str) -> JsonDict: 
-        
         return self.predict_json({"sentence": sentence})
 
     @overrides
     def _json_to_instance(self, json_dict: JsonDict) -> Instance:
         """
         Expects JSON that looks like ``{"sentence": "..."}``.
-        Runs the underlying model, and adds the ``"words"`` to the output, also tags and parse??.
+        Runs the underlying model, and adds the ``"tokens"`` to the output.
         """
         sentence = json_dict["sentence"]
-
-        tokens = sentence.split()  # Simple tokenization, can do better though!
+        tokens = sentence.split()
         tokens = str(tokens)
-
-        
         return self._dataset_reader.text_to_instance(tokens)
 
     @overrides
@@ -45,7 +43,6 @@ class EnhancedPredictor(Predictor):
             self._predict_unknown(instance)
 
         outputs = self._model.forward_on_instance(instance)
-
         return sanitize(outputs)
 
     def _predict_unknown(self, instance: Instance):
@@ -62,14 +59,19 @@ class EnhancedPredictor(Predictor):
                                                  if label in self._model.vocab._token_to_index[namespace]
                                                  else token
                                                  for label in instance.fields[namespace].labels]
+        
+        replace_tokens(instance, "lemmas", "↓0;d¦")
+        replace_tokens(instance, "feats", "_")
+        replace_tokens(instance, "xpos", "_")
+        replace_tokens(instance, "upos", "NOUN")
+        replace_tokens(instance, "head_tags", "case")
 
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
-        global sentence_index
-
-        sentence_index += 1
-        sent_id = ('# sent_id = ' + str(sentence_index))
-        text = ('# text = ' + ' '.join(w for w in outputs["tokens"]))
+        #global sentence_index
+        #sentence_index += 1
+        #sent_id = ('# sent_id = ' + str(sentence_index))
+        #text = ('# text = ' + ' '.join(w for w in outputs["tokens"]))
 
         word_count = len([word for word in outputs["tokens"]])
 
@@ -86,10 +88,9 @@ class EnhancedPredictor(Predictor):
             else:
                 cleaned_heads.append(head)
         outputs["head_indices"] = cleaned_heads
-        
-                
+                     
         # dictionary mapping original conllu IDs (which contain float-values) to 1-indexed IDs as they appear in the sentence
-        # if there are no ellided tokens this is None
+        # if there are no elided tokens this is None
         original_to_new_indices = outputs["original_to_new_indices"]
 
         # create dict to store mappings from CoNLLU ids to dependency relations
@@ -97,10 +98,8 @@ class EnhancedPredictor(Predictor):
 
         for label_index, (head, dep) in enumerate(predicted_arcs):
             # change the head and dep to the original indices
-            
             if type(original_to_new_indices) == dict:
                 original_to_new_index_mappings = original_to_new_indices.items()
-            
                 for mapping in original_to_new_index_mappings:
                     # if head or dep is the newer index[1]; change back to the original index[0]
                     if head == mapping[1]:
@@ -117,10 +116,9 @@ class EnhancedPredictor(Predictor):
         for conllu_id, pred_output in id_to_deprel_mappings.items():            
             # keep a list for words with multiple heads
             current_targets = []
-            
             num_deprels = len(pred_output)
             for head_rel_tuple in pred_output:    
-                target = ":".join(str(x) for x in head_rel_tuple)                                
+                target = ":".join(str(x) for x in head_rel_tuple)                               
                 if num_deprels == 1:
                     id_to_formatted_deprel_mappings[conllu_id] = target                
                 elif num_deprels > 1:
@@ -132,22 +130,34 @@ class EnhancedPredictor(Predictor):
                 formatted_target = "|".join(str(x) for x in current_targets)
                 id_to_formatted_deprel_mappings[conllu_id] = formatted_target
 
-        print("id_to_formatted_deprel_mappings", id_to_formatted_deprel_mappings)
+        #print("id_to_formatted_deprel_mappings", id_to_formatted_deprel_mappings)
            
         # restructure the outputs to match the CoNLLU format
         outputs["arc_tags"] = id_to_formatted_deprel_mappings.values()
-                
-        
+       
         lines = zip(*[outputs[k] if k in outputs else ["_"] * word_count
-                      for k in ["ids", "tokens", "lemmas", "pos", "xpos", "feats",
-                                "head_indices", "head_tags", "arc_tags"]])
+                      for k in ["ids", "tokens", "lemmas", "upos", "xpos", "feats",
+                                "head_indices", "head_tags", "arc_tags"]]) # TODO MISC
+
+        multiword_map = None
+        if outputs["multiword_ids"]:
+            multiword_ids = [[id] + [int(x) for x in id.split("-")] for id in outputs["multiword_ids"]]
+            multiword_forms = outputs["multiword_forms"]
+            multiword_map = {start: (id_, form) for (id_, start, end), form in zip(multiword_ids, multiword_forms)}
+
 
         output_lines = []
         for i, line in enumerate(lines):
             line = [str(l) for l in line]
 
+            # Handle multiword tokens
+            if multiword_map and i+1 in multiword_map:
+                id_, form = multiword_map[i+1]
+                row = f"{id_}\t{form}" + "".join(["\t_"] * 8)
+                output_lines.append(row)
+
             row = "\t".join(line) + "".join(["\t_"] * 1)
             output_lines.append(row)
 
-        output_lines = [sent_id] + [text] + output_lines
+        #output_lines = [sent_id] + [text] + output_lines
         return "\n".join(output_lines) + "\n\n"
