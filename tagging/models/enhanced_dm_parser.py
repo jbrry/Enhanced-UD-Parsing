@@ -72,7 +72,10 @@ class EnhancedDMParser(Model):
         arc_representation_dim: int,
         tag_feedforward: FeedForward = None,
         arc_feedforward: FeedForward = None,
+        lemma_tag_embedding: Embedding = None,
         upos_tag_embedding: Embedding = None,
+        xpos_tag_embedding: Embedding = None,
+        feats_tag_embedding: Embedding = None,
         dropout: float = 0.0,
         input_dropout: float = 0.0,
         edge_prediction_threshold: float = 0.5,
@@ -109,7 +112,11 @@ class EnhancedDMParser(Model):
             tag_representation_dim, tag_representation_dim, label_dim=num_labels
         )
 
+        self._lemma_tag_embedding = lemma_tag_embedding or None
         self._upos_tag_embedding = upos_tag_embedding or None
+        self._xpos_tag_embedding = xpos_tag_embedding or None
+        self._feats_tag_embedding = feats_tag_embedding or None
+        
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
 
@@ -117,9 +124,15 @@ class EnhancedDMParser(Model):
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
 
         representation_dim = text_field_embedder.get_output_dim()
+        if lemma_tag_embedding is not None:
+            representation_dim += lemma_tag_embedding.get_output_dim()
         if upos_tag_embedding is not None:
             representation_dim += upos_tag_embedding.get_output_dim()
-
+        if xpos_tag_embedding is not None:
+            representation_dim += xpos_tag_embedding.get_output_dim()
+        if feats_tag_embedding is not None:
+            representation_dim += feats_tag_embedding.get_output_dim()
+            
         check_dimensions_match(
             representation_dim,
             encoder.get_input_dim(),
@@ -151,10 +164,10 @@ class EnhancedDMParser(Model):
     def forward(
         self,  # type: ignore
         tokens: TextFieldTensors,
+        lemmas: torch.LongTensor = None,
         upos: torch.LongTensor = None,
         xpos: torch.LongTensor = None,
         feats: torch.LongTensor = None,
-        lemmas: torch.LongTensor = None,
         metadata: List[Dict[str, Any]] = None,
         enhanced_tags: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
@@ -178,11 +191,22 @@ class EnhancedDMParser(Model):
         An output dictionary.
         """
         embedded_text_input = self.text_field_embedder(tokens)
+        concatenated_input = [embedded_text_input]
+        
         if upos is not None and self._upos_tag_embedding is not None:
-            embedded_upos_tags = self._upos_tag_embedding(upos)
-            embedded_text_input = torch.cat([embedded_text_input, embedded_upos_tags], -1)
+            concatenated_input.append(self._upos_tag_embedding(upos))            
         elif self._upos_tag_embedding is not None:
-            raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
+            raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")            
+        
+        if lemmas is not None and self._lemma_tag_embedding is not None:
+            concatenated_input.append(self._lemma_tag_embedding(lemmas))
+        if xpos is not None and self._xpos_tag_embedding is not None:
+            concatenated_input.append(self._xpos_tag_embedding(xpos))          
+        if feats is not None and self._feats_tag_embedding is not None:
+            concatenated_input.append(self._feats_tag_embedding(feats))
+            
+        if len(concatenated_input) > 1:
+            embedded_text_input = torch.cat(concatenated_input, -1)
 
         mask = get_text_field_mask(tokens)
         embedded_text_input = self._input_dropout(embedded_text_input)
@@ -257,7 +281,6 @@ class EnhancedDMParser(Model):
             gold_arcs = [meta["arc_indices"] for meta in metadata]
             gold_arc_tags = [meta["arc_tags"] for meta in metadata]
             gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
-            
             
             tag_mask = mask.unsqueeze(1) & mask.unsqueeze(2)
             self._enhanced_attachment_scores(predicted_arcs, predicted_arc_tags, predicted_labeled_arcs, \

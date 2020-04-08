@@ -1,7 +1,8 @@
 local word_embedding_dim = 100;
 local char_embedding_dim = 64;
-local pos_embedding_dim = 100;
-local embedding_dim = word_embedding_dim + pos_embedding_dim + char_embedding_dim + char_embedding_dim;
+local tag_embedding_dim = 50;
+local tag_combined_dim = 150;
+local embedding_dim = word_embedding_dim + tag_combined_dim + char_embedding_dim + char_embedding_dim;
 local hidden_dim = 400;
 local patience = 10;
 local learning_rate = 0.001;
@@ -49,9 +50,19 @@ local learning_rate = 0.001;
            }
         },
       },
+      "lemma_tag_embedding":{
+        "embedding_dim": tag_embedding_dim,
+        "vocab_namespace": "lemmas",
+        "sparse": true
+      },
       "upos_tag_embedding":{
-        "embedding_dim": pos_embedding_dim,
+        "embedding_dim": tag_embedding_dim,
         "vocab_namespace": "upos",
+        "sparse": true
+      },
+      "xpos_tag_embedding":{
+        "embedding_dim": tag_embedding_dim,
+        "vocab_namespace": "xpos",
         "sparse": true
       },
       "encoder": {
