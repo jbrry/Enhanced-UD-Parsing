@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 test -z $1 && echo "Missing task type <basic> or <enhanced>"
 test -z $1 && exit 1
@@ -17,9 +17,16 @@ test -z $4 && exit 1
 RANDOM_SEED=$4
 
 # official shared-task data (filtered contains treebanks with long sentences removed.)
-TB_DIR=data/train-dev-filtered
+TB_DIR=data/train-dev
 
 TIMESTAMP=`date "+%Y%m%d-%H%M%S"` 
+
+N_SHORT=`echo ${HOSTNAME} | cut -c-5 `
+if [ "${N_SHORT}" = "node0" ]; then
+  echo "loading CUDA"
+  module add cuda10.1
+fi
+
 
 for tbid in $TBIDS ; do
   echo
@@ -36,7 +43,7 @@ for tbid in $TBIDS ; do
 
   # hyperparams
   export BATCH_SIZE=8
-  export NUM_EPOCHS=75
+  export NUM_EPOCHS=50
   export CUDA_DEVICE=0
   export GRAD_ACCUM_BATCH_SIZE=32
 
@@ -49,7 +56,7 @@ for tbid in $TBIDS ; do
     export DEV_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-dev.conllu
     export TEST_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-test.conllu
 
-    allennlp train configs/ud_${TASK}_${MODEL_TYPE}.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED} --include-package tagging
+    allennlp train configs/ud_${TASK}_${MODEL_TYPE}.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED}-${TIMESTAMP} --include-package tagging
   done
 done
 
