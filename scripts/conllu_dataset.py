@@ -182,6 +182,7 @@ def evaluate(prediction_path, gold_path, outname = None):
     if not outname:
         outname = prediction_path[:-7] + '.eval.txt'
     command = []
+    # TODO: support evaluation of enhanced UD with official shared task script
     command.append('%s/scripts/wrapper-conll18-eval.sh' %os.environ['PRJ_DIR'])
     command.append('--output')
     command.append(outname)
