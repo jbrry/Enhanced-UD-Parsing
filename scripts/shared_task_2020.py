@@ -125,9 +125,10 @@ Options:
             elif option == '--final-test':
                 self.final_test = True
             elif option == '--skip-training':
-                if name == 'ALL':
-                    name = 'segmenter basic_parser enhanced_parser'
-                for name in sys.argv[1].replace(':', ' ').split():
+                names = sys.argv[1].replace(':', ' ').split()
+                if 'ALL' in names:
+                    names = 'segmenter basic_parser enhanced_parser'.split()
+                for name in names:
                     self.modules_not_to_train.add(name)
                 del sys.argv[1]
             elif option == '--workdir':
@@ -221,6 +222,8 @@ Options:
             if tbid is None:
                 print('Warning: No TBID found for %s %s. Please add `tbid.txt`.' %(folder_type, tbname))
             else:
+                if tbid in retval:
+                    print('Warning: Duplicate TBID %s causing information loss in %s' %(tbid, folder_path))
                 retval[tbid] = (
                     tbdir, training_data, tbid_needs_models, prediction_tasks,
                     dev_conllu,
@@ -308,6 +311,60 @@ Options:
         self.ud25_treebanks = self.scan_ud_or_task_folder(
             self.ud25dir, 'UD v2.5'
         )
+
+    def predict_and_evaluate(self):
+        segment_dir = '/'.join(self.tempdir, 'segmented')
+        utilities.makedirs(segment_dir)
+        basic_p_dir = '/'.join(self.tempdir, 'basic-parses')
+        utilities.makedirs(basic_p_dir)
+        enhanced_dir = self.predictdir
+        utilities.makedirs(enhanced_dir)
+        for tbid in sorted(list(self.task_treebanks.keys())):
+            prediction_tasks = self.task_treebanks[tbid][3]
+            for input_path, prediction_dataset_type in prediction_tasks:
+                if prediction_dataset_type == 'test' \
+                and not self.final_test:
+                    # no need to make prediction for test sets unless
+                    # specifically requested with --final-test
+                    continue
+                tb_dir, text_filename = input_path.rsplit('/', 1)
+                assert text_filename.startswith(tbid)
+                assert text_filename.endswith('.txt')
+                prediction_name = text_filename[:-4]
+                for config in self.configs[tbid]:
+                    segmented_path = '%s/%s-%s.conllu' %(
+                        segment_dir, config.segmenter, prediction_name
+                    )
+                    if not os.path.exists(segmented_path):
+                        config.segment(input_path, segmented_path)
+                    if not os.path.exists(segmented_path):
+                        print('Warning: Failure to produce %s' %segmented_path)
+                        continue
+                    basic_p_path = '%s/%s-%s-%s.conllu' %(
+                        basic_p_dir, config.segmenter,
+                        config.basic_parser,
+                        prediction_name
+                    )
+                    if not os.path.exists(basic_p_path):
+                        config.parse(segmented_path, basic_p_path)
+                    if not os.path.exists(basic_p_path):
+                        print('Warning: Failure to produce %s' %basic_p_path)
+                        continue
+                    enhanced_path = '%s/%s-%s-%s-%s.conllu' %(
+                        enhanced_dir, config.segmenter,
+                        config.basic_parser,
+                        config.enhanced_parser,
+                        prediction_name
+                    )
+                    if not os.path.exists(enhanced_path):
+                        config.enhance(basic_p_path, enhanced_path)
+                    if not os.path.exists(enhanced_path):
+                        print('Warning: Failure to produce %s' %enhanced_path)
+                        continue
+                    # evaluate: gold file is assumed to be in the same folder
+                    # as the input text file with .conllu instead of .txt
+                    gold_path = '%s/%s.conllu' %(tb_dir, prediction_name)
+                    conllu_dataset.evaluate(enhanced_path, gold_path)
 
 class Config_default:
 
@@ -695,7 +752,7 @@ def main():
     options = Options()
     options.get_tasks_and_configs()
     options.scan_ud25()
-    options.train_missing_models()
+    options.train_missing_models()  # respects --skip-training
     if options.training_only:
         return
     options.predict_and_evaluate()
