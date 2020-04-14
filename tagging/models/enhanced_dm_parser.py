@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 @Model.register("enhanced_dm_parser")
-class EnhancedDMParser(Model):
+class EnhancedDMParserCons(Model):
     """
     A Parser for arbitrary graph structures.
     This enhanced dependency parser follows the model of
@@ -139,14 +139,12 @@ class EnhancedDMParser(Model):
             "text field embedding dim",
             "encoder input dim",
         )
-        
         check_dimensions_match(
             tag_representation_dim,
             self.head_tag_feedforward.get_output_dim(),
             "tag representation dim",
             "tag feedforward output dim",
         )
-        
         check_dimensions_match(
             arc_representation_dim,
             self.head_arc_feedforward.get_output_dim(),
@@ -155,7 +153,6 @@ class EnhancedDMParser(Model):
         )
 
         self._enhanced_attachment_scores = EnhancedAttachmentScores()
-        
         self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction="none")
         self._tag_loss = torch.nn.CrossEntropyLoss(reduction="none")
         initializer(self)
@@ -192,18 +189,44 @@ class EnhancedDMParser(Model):
         """
         embedded_text_input = self.text_field_embedder(tokens)
         concatenated_input = [embedded_text_input]
-        
         if upos is not None and self._upos_tag_embedding is not None:
             concatenated_input.append(self._upos_tag_embedding(upos))            
         elif self._upos_tag_embedding is not None:
-            raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")            
-        
+            raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
+            
         if lemmas is not None and self._lemma_tag_embedding is not None:
             concatenated_input.append(self._lemma_tag_embedding(lemmas))
         if xpos is not None and self._xpos_tag_embedding is not None:
-            concatenated_input.append(self._xpos_tag_embedding(xpos))          
-        if feats is not None and self._feats_tag_embedding is not None:
-            concatenated_input.append(self._feats_tag_embedding(feats))
+            concatenated_input.append(self._xpos_tag_embedding(xpos))        
+        if feats is not None and self._feats_tag_embedding is not None:            
+            batch_size, sequence_len, max_len = feats.size()
+            # shape: (batch, seq_len, max_len)
+            feats_mask = (feats != -1).long()
+            feats = feats * feats_mask
+            # tensor corresponding to the number of active components, e.g. morphological features
+            number_active_components = feats_mask.sum(-1)
+            # sometimes a token in the batch will be padding, and when this is masked and divided by 0 it will return a NaN
+            # so we replaces 0s with 1s to avoid this.
+            number_active_components[number_active_components==0] = 1
+            
+            feats_embeddings = []
+            # shape: (seq_len, max_len)
+            for feat_tensor in feats:              
+                # shape: (seq_len, max_len, emb_dim)
+                embedded_feats = self._feats_tag_embedding(feat_tensor)
+                feats_embeddings.append(embedded_feats)
+            # shape: (batch, seq_len, max_len, emb_dim)
+            stacked_feats_tensor = torch.stack(feats_embeddings)
+            tag_embedding_dim = stacked_feats_tensor.size(-1)
+            feats_mask_expanded = feats_mask.unsqueeze_(-1).expand(batch_size, sequence_len, max_len, tag_embedding_dim)            
+            # shape: (batch, seq_len, max_len, emb_dim)
+            masked_feats = stacked_feats_tensor * feats_mask_expanded
+            # shape: (batch, seq_len, tag_embedding_dim)            
+            combined_masked_feats = masked_feats.sum(2)            
+            expanded_number_active_components = number_active_components.unsqueeze(-1).expand(batch_size, sequence_len, tag_embedding_dim)                        
+            # divide the summed feats vectors by the number of non-padded elements
+            averaged_feats = combined_masked_feats / expanded_number_active_components
+            concatenated_input.append(averaged_feats)
             
         if len(concatenated_input) > 1:
             embedded_text_input = torch.cat(concatenated_input, -1)
