@@ -667,17 +667,29 @@ class Config_with_more_datasets(Config_default):
 class Config_cs(Config_with_more_datasets):
 
     def get_additional_dataset_tbids(self):
-        return ('cs_cac', 'cs_pdt')
+        return [
+            ('cs_cac', False),
+            ('cs_pdt', False),
+        ]
 
 class Config_en(Config_with_more_datasets):
 
     def get_additional_dataset_tbids(self):
-        return ('en_ewt', 'en_gum', 'en_lines', 'en_partut')
+        return [
+            ('en_ewt', False),
+            ('en_gum', False),
+            ('en_lines', False),
+            ('en_partut', False),
+        ]
 
-class Config_ru_syntagrus(Config_with_more_datasets):
+class Config_ru_ftuture_syntagrus(Config_with_more_datasets):
 
     def get_additional_dataset_tbids(self):
-        return ('ru_syntagrus', 'ru_gsd', 'ru_taiga')
+        return [
+            ('ru_syntagrus', False),
+            ('ru_gsd', False),
+            ('ru_taiga', False),
+        ]
 
 def main():
     options = Options()
