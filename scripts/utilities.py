@@ -290,3 +290,14 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
     options.in_progress.add(model_dir)
     return tr_data_filename, monitoring_datasets, model_dir, epochs
 
+def wait_for_tasks(task_list):
+    for task in task_list:
+        if task is None:
+            continue
+        task.wait()
+        try:
+            cleanup = task.cleanup_object
+        except:
+            cleanup = None
+        if cleanup is not None:
+            cleanup.cleanup()

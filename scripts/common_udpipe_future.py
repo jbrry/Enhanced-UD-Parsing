@@ -125,18 +125,6 @@ def run_command(
         if cleanup is not None:
             cleanup.cleanup()
 
-def wait_for_tasks(task_list):
-    for task in task_list:
-        if task is None:
-            continue
-        task.wait()
-        try:
-            cleanup = task.cleanup_object
-        except:
-            cleanup = None
-        if cleanup is not None:
-            cleanup.cleanup()
-
 class Task:
 
     def __init__(self, command, queue_name = 'udpf', requires = None, priority = 50):
