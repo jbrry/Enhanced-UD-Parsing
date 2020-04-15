@@ -61,14 +61,14 @@ for tbid in $TBIDS ; do
   # get user and model names on huggingface
   if [ "${BERT_MODEL}" = "ar" ]; then
     model_path="asafaya/bert-base-arabic"
-  elif [ "${BERT_MODEL}" = "bg-cs-pl-ru" ]; then
+  elif [ "${BERT_MODEL}" = "bg_cs_pl_ru" ]; then
     model_path="DeepPavlov/bert-base-bg-cs-pl-ru-cased"
   elif [ "${BERT_MODEL}" = "en" ]; then
     model_path="bert-base-cased"
   elif [ "${BERT_MODEL}" = "fi" ]; then
     model_path="TurkuNLP/bert-base-finnish-cased-v1"
   elif [ "${BERT_MODEL}" = "fr" ]; then
-    model_path="camembert/camembert-base"
+    model_path="camembert-base"
   elif [ "${BERT_MODEL}" = "it" ]; then
     model_path="dbmdz/bert-base-italian-cased" 
   elif [ "${BERT_MODEL}" = "mbert" ]; then
