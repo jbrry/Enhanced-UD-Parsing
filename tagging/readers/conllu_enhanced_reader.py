@@ -240,12 +240,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         fields: Dict[str, Field] = {}
         
         token_field  = TextField([Token(t) for t in tokens], self._token_indexers)
-        fields["tokens"] = token_field        
-        names = ["upos", "xpos", "feats", "lemmas"]
-        all_tags = [upos_tags, xpos_tags, feats, lemmas]
+        fields["tokens"] = token_field
+        names = ["upos", "xpos", "lemmas"]
+        all_tags = [upos_tags, xpos_tags, lemmas]
         for name, field in zip(names, all_tags):
             if field:
                 fields[name] = SequenceLabelField(field, token_field, label_namespace=name)        
+        
+        sublist_fields = []
+        for atomic_feat in feats:
+            feat_fields = ListField([LabelField(feat, label_namespace="feats")
+                                      for feat in atomic_feat.split("|")])   
+            sublist_fields.append(feat_fields)
+        fields["feats"] = ListField(sublist_fields)
         
         # basic dependency tree
         if dependencies is not None:
