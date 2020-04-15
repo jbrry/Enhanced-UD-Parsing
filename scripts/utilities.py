@@ -269,8 +269,13 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
     model_dir = get_model_dir(
         module_name, lcode, init_seed, datasets, options,
     )
-    if os.path.exists(model_dir) \
-    or model_dir in options.in_progress:
+    if os.path.exists(model_dir):
+        if options.debug:
+            print('Not providing training details for model that already exists: %s' %model_dir)
+        return None, None, None, None
+    if model_dir in options.in_progress:
+        if options.debug:
+            print('Not providing training details for model that is in progress being trained: %s' %model_dir)
         return None, None, None, None
     tr_data_filename, n_tokens = get_conllu_concat_filename_and_size(
         lcode, datasets, options, 'train',

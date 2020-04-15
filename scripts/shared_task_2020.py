@@ -290,6 +290,8 @@ Options:
                     print('\t\t', item)
 
     def train_missing_models(self):
+        if self.verbose:
+            print('\n== Training Models ==\n')
         tasks = []
         self.in_progress = set()
         for tbid in sorted(list(self.configs.keys())):
@@ -313,6 +315,8 @@ Options:
         )
 
     def predict_and_evaluate(self):
+        if self.verbose:
+            print('\n== Prediction and Evaluation ==\n')
         segment_dir = '/'.join((self.tempdir, 'segmented'))
         utilities.makedirs(segment_dir)
         basic_p_dir = '/'.join((self.tempdir, 'basic-parses'))
@@ -322,6 +326,7 @@ Options:
         for tbid in sorted(list(self.task_treebanks.keys())):
             prediction_tasks = self.task_treebanks[tbid][3]
             for input_path, prediction_dataset_type in prediction_tasks:
+                print('\n=== %s ===\n' %input_path)
                 if prediction_dataset_type == 'test' \
                 and not self.final_test:
                     # no need to make prediction for test sets unless
@@ -332,32 +337,43 @@ Options:
                 assert text_filename.endswith('.txt')
                 prediction_name = text_filename[:-4]
                 for config in self.configs[tbid]:
-                    segmented_path = '%s/%s-%s.conllu' %(
-                        segment_dir, config.segmenter, prediction_name
+                    print('\n==== %r ====\n' %config)
+                    segmented_path = '%s/%s-for-%s.conllu' %(
+                        segment_dir,
+                        config.segmenter.replace(':', '_').replace('.', '_'),
+                        prediction_name
                     )
                     if not os.path.exists(segmented_path):
                         config.segment(input_path, segmented_path)
+                    else:
+                        print('Reusing existing segmentation')
                     if not os.path.exists(segmented_path):
                         print('Warning: Failure to produce %s' %segmented_path)
                         continue
-                    basic_p_path = '%s/%s-%s-%s.conllu' %(
-                        basic_p_dir, config.segmenter,
-                        config.basic_parser,
+                    basic_p_path = '%s/%s-%s-for-%s.conllu' %(
+                        basic_p_dir,
+                        config.segmenter.replace(':', '_').replace('.', '_'),
+                        config.basic_parser_short_name,
                         prediction_name
                     )
                     if not os.path.exists(basic_p_path):
                         config.parse(segmented_path, basic_p_path)
+                    else:
+                        print('Reusing existing basic parse')
                     if not os.path.exists(basic_p_path):
                         print('Warning: Failure to produce %s' %basic_p_path)
                         continue
-                    enhanced_path = '%s/%s-%s-%s-%s.conllu' %(
-                        enhanced_dir, config.segmenter,
-                        config.basic_parser,
+                    enhanced_path = '%s/%s-%s-%s-for-%s.conllu' %(
+                        enhanced_dir,
+                        config.segmenter.replace(':', '_').replace('.', '_'),
+                        config.basic_parser_short_name,
                         config.enhanced_parser,
                         prediction_name
                     )
                     if not os.path.exists(enhanced_path):
                         config.enhance(basic_p_path, enhanced_path)
+                    else:
+                        print('Reusing existing enhanced parse')
                     if not os.path.exists(enhanced_path):
                         print('Warning: Failure to produce %s' %enhanced_path)
                         continue
@@ -621,12 +637,21 @@ class Config_default:
         parsers = self.variant[1]
         if not parsers:
             print('Warning: No parser found that supports', self.lcode)
+        ensemble_size = self.get_basic_parser_ensemble_size()
         p_name2p_index = defaultdict(lambda: 0)
-        for index in range(self.get_basic_parser_ensemble_size()):
+        for index in range(ensemble_size):
             round_robin_choice = parsers[index % len(parsers)]
             p_index = p_name2p_index[round_robin_choice]
             p_name2p_index[round_robin_choice] = p_index + 1
             self.basic_parsers.append((round_robin_choice, p_index))
+        # set short name of combination
+        if len(parsers) > ensemble_size:
+            parsers = parsers[:ensemble_size]
+        name = []
+        name.append('e%d' %ensemble_size)
+        for parser in parsers:
+            name.append(parser.replace(':', '_').replace('.', '_'))
+        self.basic_parser_short_name = '_'.join(name)
 
     def init_enhanced_parser(self):
         self.enhanced_parser = self.variant[2]
@@ -717,6 +742,36 @@ class Config_default:
             self.lcode, self.options.init_seed, datasets, self.options,
             raw_text_input, conllu_output,
         )
+
+    def parse(self, conllu_input, conllu_output):
+        ensemble_predictions = []
+        output_prefix = conllu_output[:-7]
+        n_parses = len(self.basic_parsers)
+        parses_ready = 0
+        for parser_and_dataset, p_index in self.basic_parsers:
+            parser_module, datasets = parser_and_dataset.split(':', 1)
+            parser = importlib.import_module(parser_module)
+            init_seed = '%s%02d' %(self.options.init_seed, p_index)
+            conllu_individual_output = '%s-vote-%s-of-%s.conllu' %(
+                output_prefix, parses_ready + 1, n_parses
+            )
+            if self.options.debug:
+                print('Predicting basic parse %d of %d for %s using %s trained on %s with seed %s' %(
+                    parses_ready + 1, n_parses,
+                    conllu_input, parser_module, datasets,
+                    init_seed,
+                ))
+            parser.predict(
+                self.lcode, init_seed, datasets, self.options,
+                conllu_input, conllu_individual_output,
+            )
+            parses_ready += 1
+            ensemble_predictions.append(conllu_individual_output)
+        # TODO: run combiner
+        # (there should be a function preparing the command line
+        # somewhere in the tt code)
+        raise NotImplementedError
+
 
 class Config_with_more_datasets(Config_default):
 

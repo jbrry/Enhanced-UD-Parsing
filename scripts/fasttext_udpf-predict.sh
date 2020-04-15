@@ -21,7 +21,7 @@ EXTRA_OPTIONS="$4"
 
 test -z ${PRJ_DIR} && PRJ_DIR=${HOME}/enhanced-ud/Enhanced-UD-Parsing
 
-source ${PRJ_DIR}/config/locations.sh
+#source ${PRJ_DIR}/config/locations.sh
 
 PARSER_NAME=udpipe-future
 PARSER_DIR=${UDPIPE_FUTURE_DIR}
