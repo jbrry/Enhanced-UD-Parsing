@@ -313,9 +313,9 @@ Options:
         )
 
     def predict_and_evaluate(self):
-        segment_dir = '/'.join(self.tempdir, 'segmented')
+        segment_dir = '/'.join((self.tempdir, 'segmented'))
         utilities.makedirs(segment_dir)
-        basic_p_dir = '/'.join(self.tempdir, 'basic-parses')
+        basic_p_dir = '/'.join((self.tempdir, 'basic-parses'))
         utilities.makedirs(basic_p_dir)
         enhanced_dir = self.predictdir
         utilities.makedirs(enhanced_dir)
@@ -706,6 +706,17 @@ class Config_default:
         ))
         return tasks
 
+    def segment(self, raw_text_input, conllu_output):
+        segmenter_module, datasets = self.segmenter.split(':', 1)
+        segmenter = importlib.import_module(segmenter_module)
+        if self.options.debug:
+            print('Predicting segmentation for %s using %s trained on %s' %(
+                raw_text_input, segmenter_module, datasets,
+            ))
+        segmenter.predict(
+            self.lcode, self.options.init_seed, datasets, self.options,
+            raw_text_input, conllu_output,
+        )
 
 class Config_with_more_datasets(Config_default):
 
