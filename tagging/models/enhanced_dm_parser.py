@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 @Model.register("enhanced_dm_parser")
-class EnhancedDMParserCons(Model):
+class EnhancedDMParser(Model):
     """
     A Parser for arbitrary graph structures.
     This enhanced dependency parser follows the model of
@@ -205,8 +205,8 @@ class EnhancedDMParserCons(Model):
             feats = feats * feats_mask
             # tensor corresponding to the number of active components, e.g. morphological features
             number_active_components = feats_mask.sum(-1)
-            # sometimes a token in the batch will be padding, and when this is masked and divided by 0 it will return a NaN
-            # so we replaces 0s with 1s to avoid this.
+            # a padding token's summed vector will be filled with 0s and when this is divided by 0 
+            # it will return a NaN so we replaces 0s with 1s in the denominator tensor to avoid this.
             number_active_components[number_active_components==0] = 1
             
             feats_embeddings = []
@@ -277,8 +277,7 @@ class EnhancedDMParserCons(Model):
             output_dict["xpos"] = [meta["xpos_tags"] for meta in metadata]
             output_dict["feats"] = [meta["feats"] for meta in metadata]
             output_dict["head_tags"] = [meta["head_tags"] for meta in metadata]
-            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata]
-            
+            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata] 
             output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]
             output_dict["multiword_ids"] = [x["multiword_ids"] for x in metadata if "multiword_ids" in x]
             output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x]            
