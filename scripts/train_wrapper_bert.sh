@@ -17,7 +17,7 @@ JOB=$3
 
 test -z $4 && echo "Missing language code for BERT; currently supports: (ar bg-cs-pl-ru en fi it mbert nl pl ru sv)"
 test -z $4 && exit 1
-BERT_TYPE=$4
+BERT_MODEL=$4
 
 test -z $5 && echo "Missing seed number"
 test -z $5 && exit 1
@@ -32,7 +32,7 @@ JOB_D="pl_pdb fi_tdt ar_padt fr_sequoia"
 JOB_E="pl_lfg cs_fictree nl_lassysmall et_ewt"
 
 # append specific tbids here
-JOB_F="ru_syntagrus"
+JOB_F="fr_sequoia"
 
 if [ ${JOB} == "A" ]; then
   JOB_GROUP=$JOB_A
@@ -51,6 +51,6 @@ fi
 for TBID in ${JOB_GROUP[@]}; do
     echo "training on ${TBID}"
 
-    bash scripts/train_bert.sh ${TASK} ${MODEL_TYPE} ${TBID} ${BERT_TYPE} ${SEED}
+    bash scripts/train_bert.sh ${TASK} ${MODEL_TYPE} ${TBID} ${BERT_MODEL} ${SEED}
 done
 
