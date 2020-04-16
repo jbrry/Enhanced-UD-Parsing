@@ -45,8 +45,11 @@ def predict(lcode, init_seed, dataset, options, conllu_input_file, conllu_output
         if '\t' in line:
             # token row
             fields = line.split('\t')
-            fields[8] = fields[6] + ':' + fields[7]
-            line = '\t'.join(fields)
+            head = fields[6]
+            label = fields[7]
+            if head != '_' and label != '_':
+                fields[8] = head + ':' + label
+                line = '\t'.join(fields)
         f_out.write(line)
     f_in.close()
     f_out.close()

@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 import basic_dataset
+import utilities
 
 id_column = 0
 token_column = 1
@@ -195,7 +196,7 @@ def evaluate(prediction_path, gold_path, options, outname = None):
         if not os.path.exists(collapsed_conllu):
             command = []
             command.append('scripts/wrapper-collapse-empty-nodes.sh')
-            command.append(normal_conllu)
+            command.append(input_conllu)
             command.append(collapsed_conllu)
             if options.debug:
                 print('Collapsing %s file...' %what)
