@@ -46,7 +46,7 @@ def supports_lcode(lcode):
     return os.path.exists('%s/%s_model' %(
         os.environ['EFML_MODEL_DIR'],
         lcode,
-    )) 
+    ))
 
 def can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
     return not is_polyglot
@@ -242,7 +242,7 @@ class ElmoCache:
                 # later probe in order to stabilise the positions of entries
                 # as they are removed and re-added to the cache.
                 # However, to not scan unreasonably long, we note the probe
-                # index and, at the start of the loop above, limit how far 
+                # index and, at the start of the loop above, limit how far
                 # we scan.
                 if accept_free and not found_earlier_free:
                     found_earlier_free = True
@@ -1079,6 +1079,17 @@ class NPZTasks:
         print('Deprecation warning: Please use return value of NPZTasks.append() instead of NPZTasks.get_last_npz_file().')
         return self.tasks[-1].npz_file
 
+    def wait(self):
+        while True:
+            found_all = True
+            for npz_file in self.get_npz_files():
+                if not os.path.exists(npz_file):
+                    found_all = False
+                    break
+            if found_all:
+                break
+            time.sleep(2.0)
+
     def cleanup(self):
         for npz_file in self.get_npz_files():
             if os.path.exists(npz_file):
@@ -1165,42 +1176,44 @@ def train(
             raise ValueError('Model is missing essential files: ' + error_name)
 
 def predict(
-    model_path, input_path, prediction_output_path,
-    priority = 50,
-    is_multi_treebank = False,
-    submit_and_return = False,
-    wait_for_input = False,
-    wait_for_model = False,
+    lcode, init_seed, datasets, options,
+    conllu_input, conllu_output,
 ):
-    # read lcode from model file
-    lcode_file = open('%s/elmo-lcode.txt' %model_path, 'rb')
-    lcode = lcode_file.readline().rstrip()
-    lcode_file.close()
-    # prepare npz files and parser command
+    is_multi_treebank = '+' in datasets
+    model_path = utilities.get_model_dir(
+        'elmo_udpf', lcode, init_seed, datasets, options,
+    )
+    if model_path is None:
+        raise ValueError('Request to predict with a model for which training is not supported')
+    if not os.path.exists(model_path):
+        if options.debug:
+            print('Model %s not found' %model_path)
+        return False
     command = []
-    npz_tasks = NPZTasks(prediction_output_path, lcode, priority = priority)
+    # prepare npz files and parser command
+    npz_tasks = NPZTasks(conllu_output, lcode)
     command.append('scripts/elmo_udpf-predict.sh')
     command.append(model_path)
-    command.append(input_path)
-    command.append(npz_tasks.append(input_path))
-    command.append(prediction_output_path)
+    command.append(conllu_input)
+    command.append(npz_tasks.append(conllu_input))
+    command.append(conllu_output)
     command.append(lcode)
     if is_multi_treebank:
         command.append('--extra_input tbemb')  # will be split into 2 args in wrapper script
-    requires = npz_tasks.get_npz_files()
-    if wait_for_input:
-        requires.append(input_path)
-    if wait_for_model:
-        requires.append(model_path)
-    common_udpipe_future.run_command(
-        command,
-        requires = requires,
-        priority = 100+priority,
-        submit_and_return = submit_and_return,
-        cleanup = npz_tasks,
-    )
-    if submit_and_return:
-        return task
+    if options.debug:
+        print('Waiting for elmo npz file to be ready')
+        sys.stderr.flush()
+        sys.stdout.flush()
+    npz_tasks.wait()
+    if options.debug:
+        print('Running', command)
+    sys.stderr.flush()
+    sys.stdout.flush()
+    subprocess.call(command)
+    npz_tasks.cleanup()
+    # TODO: check output more carefully,
+    #       e.g. check number of sentences (=number of empty lines)
+    return os.path.exists(conllu_output)
 
 def main():
     last_arg_name = 'QUEUENAME'

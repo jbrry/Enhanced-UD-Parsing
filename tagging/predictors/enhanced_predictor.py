@@ -37,34 +37,8 @@ class EnhancedPredictor(Predictor):
 
     @overrides
     def predict_instance(self, instance: Instance) -> JsonDict:
-        if "@@UNKNOWN@@" not in self._model.vocab._token_to_index["arc_tags"]:
-            # Handle cases where the labels are present in the test set but not training set
-            # https://github.com/Hyperparticle/udify/blob/b6a1173e7e5fc1e4c63f4a7cf1563b469268a3b8/udify/predictors/predictor.py
-            self._predict_unknown(instance)
-
         outputs = self._model.forward_on_instance(instance)
         return sanitize(outputs)
-
-    def _predict_unknown(self, instance: Instance):
-        """
-        Maps each unknown label in each namespace to a default token
-        :param instance: the instance containing a list of labels for each namespace
-        from: https://github.com/Hyperparticle/udify/blob/b6a1173e7e5fc1e4c63f4a7cf1563b469268a3b8/udify/predictors/predictor.py
-        """
-        def replace_tokens(instance: Instance, namespace: str, token: str):
-            if namespace not in instance.fields:
-                return
-
-            instance.fields[namespace].labels = [label
-                                                 if label in self._model.vocab._token_to_index[namespace]
-                                                 else token
-                                                 for label in instance.fields[namespace].labels]
-        
-        replace_tokens(instance, "lemmas", "↓0;d¦")
-        replace_tokens(instance, "feats", "_")
-        replace_tokens(instance, "xpos", "_")
-        replace_tokens(instance, "upos", "NOUN")
-        replace_tokens(instance, "head_tags", "case")
 
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:

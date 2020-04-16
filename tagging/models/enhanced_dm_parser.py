@@ -102,7 +102,7 @@ class EnhancedDMParser(Model):
             arc_representation_dim, arc_representation_dim, use_input_biases=True
         )
 
-        num_labels = self.vocab.get_vocab_size("labels")
+        num_labels = self.vocab.get_vocab_size("deps")
         self.head_tag_feedforward = tag_feedforward or FeedForward(
             encoder_dim, 1, tag_representation_dim, Activation.by_name("elu")()
         )
@@ -345,9 +345,9 @@ class EnhancedDMParser(Model):
                         head_modifier_tuple = (i, j)
                         edges.append(head_modifier_tuple)
                         tag = instance_arc_tag_probs[i, j].argmax(-1)
-                        edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
+                        edge_tags.append(self.vocab.get_token_from_index(tag, "deps"))
                         # append ((h,m), label) tuple
-                        edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "labels")))
+                        edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "deps")))
                         found_heads[j] = True
             
             # some words won't have found heads so we will find the edge with the highest probability for each unassigned word
@@ -376,8 +376,8 @@ class EnhancedDMParser(Model):
                     
                     edges.append(best_edge)
                     tag = instance_arc_tag_probs[best_edge].argmax(-1)                   
-                    edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
-                    edges_and_tags.append((best_edge, self.vocab.get_token_from_index(tag, "labels")))
+                    edge_tags.append(self.vocab.get_token_from_index(tag, "deps"))
+                    edges_and_tags.append((best_edge, self.vocab.get_token_from_index(tag, "deps")))
 
             arcs.append(edges)
             arc_tags.append(edge_tags)

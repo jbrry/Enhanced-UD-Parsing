@@ -139,7 +139,7 @@ class RootedAdjacencyField(Field[torch.Tensor]):
             "\t\t" + index + "\n" for index in textwrap.wrap(repr(self.indices), 100)
         )
         return (
-            f"AdjacencyField of length {length}\n"
+            f"RootedAdjacencyField of length {length}\n"
             f"\t\twith indices:\n {formatted_indices}\n"
             f"\t\tand labels:\n {formatted_labels} \t\tin namespace: '{self._label_namespace}'."
         )

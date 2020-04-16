@@ -657,6 +657,8 @@ def main():
                         help="Name of the CoNLL-U file with the gold data.")
     parser.add_argument("system_file", type=str,
                         help="Name of the CoNLL-U file with the predicted data.")
+    parser.add_argument("--output", "-o", default=None, action="store",
+                        help="Write to file instead of stdout.")
     parser.add_argument("--verbose", "-v", default=False, action="store_true",
                         help="Print all metrics.")
     parser.add_argument("--counts", "-c", default=False, action="store_true",
@@ -664,6 +666,11 @@ def main():
     parser.add_argument("--enhancements", type=str, default='0',
                         help="Level of enhancements in the gold data (see guidelines) 0=all (default), 1=no gapping, 2=no shared parents, 3=no shared dependents 4=no control, 5=no external arguments, 6=no lemma info, combinations: 12=both 1 and 2 apply, etc.")
     args = parser.parse_args()
+
+    if args.output:
+        # Redirect output
+        backup_stdout = sys.stdout
+        sys.stdout = open(args.output, 'w')
 
     # Evaluate
     evaluation = evaluate_wrapper(args)
@@ -699,6 +706,10 @@ def main():
                     100 * evaluation[metric].f1,
                     "{:10.2f}".format(100 * evaluation[metric].aligned_accuracy) if evaluation[metric].aligned_accuracy is not None else ""
                 ))
+    if args.output:
+        # Close file and restore stdout
+        sys.stdout.close()
+        sys.stdout = backup_stdout
 
 if __name__ == "__main__":
     main()
