@@ -368,7 +368,7 @@ Options:
                         enhanced_dir,
                         config.segmenter.replace(':', '_').replace('.', '_'),
                         config.basic_parser_short_name,
-                        config.enhanced_parser,
+                        config.enhanced_parser.replace(':', '_').replace('.', '_'),
                         prediction_name
                     )
                     if not os.path.exists(enhanced_path):
@@ -460,7 +460,7 @@ class Config_default:
         return ['elmo_udpf', 'udify', 'fasttext_udpf', 'plain_udpf',]
 
     def get_enhanced_parser_names(self):
-        return ['enhanced_parser']
+        return ['copy_parse', 'enhanced_parser']
 
     def get_basic_parser_ensemble_size(self):
         return 7
@@ -742,6 +742,18 @@ class Config_default:
         segmenter.predict(
             self.lcode, self.options.init_seed, datasets, self.options,
             raw_text_input, conllu_output,
+        )
+
+    def enhance(self, conllu_input, conllu_output):
+        enhancer_module, datasets = self.enhanced_parser.split(':', 1)
+        enhancer = importlib.import_module(enhancer_module)
+        if self.options.debug:
+            print('Enhancing parse for %s using %s trained on %s' %(
+                conllu_input, enhancer_module, datasets,
+            ))
+        enhancer.predict(
+            self.lcode, self.options.init_seed, datasets, self.options,
+            conllu_input, conllu_output,
         )
 
     def parse(self, conllu_input, conllu_output):
