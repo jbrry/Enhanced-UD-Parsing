@@ -298,7 +298,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
             if arc_indices is not None and arc_tags is not None:
                 token_field_with_root = ['root'] + tokens
-                fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
+                fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags, label_namespace="deps")
         
         fields["metadata"] = MetadataField({
             "tokens": tokens,
