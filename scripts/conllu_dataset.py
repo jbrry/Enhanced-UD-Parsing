@@ -219,8 +219,6 @@ def evaluate(prediction_path, gold_path, options, outname = None):
     sys.stderr.flush()
     sys.stdout.flush()
     subprocess.call(command)
-    # TODO: adjust to new output format
-    raise NotImplementedError
     score = (0.0, 'N/A')
     with open(outname, 'rb') as f:
         for line in f:
@@ -229,7 +227,7 @@ def evaluate(prediction_path, gold_path, options, outname = None):
                 continue
             # [0]       [1] [2]         [3] [4]         [5] [6]         [7] [8]
             # LAS        |  79.756753596 |  79.756753596 |  79.756753596 |  79.756753596
-            if fields[0] == 'LAS':
+            if fields[0] == 'ELAS':
                 score = fields[6]
                 score = (float(score), score)
                 break
