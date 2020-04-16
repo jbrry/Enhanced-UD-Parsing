@@ -107,33 +107,34 @@ def check_model(model_dir):
         raise ValueError('Model is missing essential files: ' + error_name)
 
 def predict(
-    model_path, input_path, prediction_output_path,
-    priority = 50,
-    is_multi_treebank = False,
-    submit_and_return = False,
-    wait_for_input = False,
-    wait_for_model = False,
+    lcode, init_seed, datasets, options,
+    conllu_input, conllu_output,
 ):
+    is_multi_treebank = '+' in datasets
+    model_path = utilities.get_model_dir(
+        'plain_udpf', lcode, init_seed, datasets, options,
+    )
+    if model_path is None:
+        raise ValueError('Request to predict with a model for which training is not supported')
+    if not os.path.exists(model_path):
+        if options.debug:
+            print('Model %s not found' %model_path)
+        return False
     command = []
     command.append('scripts/plain_udpf-predict.sh')
     command.append(model_path)
-    command.append(input_path)
-    command.append(prediction_output_path)
+    command.append(conllu_input)
+    command.append(conllu_output)
     if is_multi_treebank:
-        command.append('--extra_input tbemb')  # will be split into 2 args in wrapper script
-    requires = []
-    if wait_for_input:
-        requires.append(input_path)
-    if wait_for_model:
-        requires.append(model_path)
-    task = common_udpipe_future.run_command(
-        command,
-        requires = requires,
-        priority = 100+priority,
-        submit_and_return = submit_and_return,
-    )
-    if submit_and_return:
-        return task
+        command.append('--extra_input tbemb')  # split into 2 args by wrapper script
+    if options.debug:
+        print('Running', command)
+        sys.stderr.flush()
+        sys.stdout.flush()
+    subprocess.call(command)
+    # TODO: check output more carefully,
+    #       e.g. check number of sentences (=number of empty lines)
+    return os.path.exists(conllu_output)
 
 def main():
     raise NotImplementedError
