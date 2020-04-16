@@ -25,14 +25,19 @@ SEED=$5
 
 # job groups based on training data size distributed in a round-robin fashion.
 # run python utils/get_training_information.py to get training metadata.
-JOB_A="cs_pdt it_isdt lv_lvtb uk_iu ta_ttb"
-JOB_B="ru_syntagrus en_ewt bg_btb sv_talbanken"
-JOB_C="cs_cac nl_alpino sk_snk lt_alksnis"
-JOB_D="ar_padt fi_tdt pl_pdb fr_sequoia"
-JOB_E="pl_lfg cs_fictree nl_lassysmall et_ewt"
 
-# append specific tbids here
-JOB_F="fr_sequoia"
+# L-BERT
+JOB_A="bg_btb cs_fictree en_ewt"
+JOB_B="pl_pdb fr_sequoia nl_lassysmall nl_alpino"
+
+# M-BERT
+JOB_C="lv_lvtb lt_alksnis pl_lfg"
+JOB_D="sk_snk ta_ttb uk_iu sk_snk"
+
+# High memory
+JOB_E="cs_pdt fi_tdt it_isdt"
+JOB_F="ar_padt ru_syntagrus sv_talbanken cs_cac"
+
 
 if [ ${JOB} == "A" ]; then
   JOB_GROUP=$JOB_A
