@@ -181,19 +181,45 @@ class ConlluDataset(basic_dataset.Dataset):
 def evaluate(prediction_path, gold_path, options, outname = None):
     if not outname:
         outname = prediction_path[:-7] + '.eval.txt'
+    # collapse enhanced dependencies as required by shared task eval script
+    collapsed_dir = '%s/collapsed' %options.predictdir
+    utilities.makedirs(collapsed_dir)
+    collapsed = {}
+    for what, input_conllu in [
+        ('system', prediction_path),
+        ('gold',   gold_path),
+    ]:
+        _, filename = input_conllu.rsplit('/', 1)
+        collapsed_conllu = '%s/%s' %(collapsed_dir, filename)
+        collapsed[what] = collapsed_conllu
+        if not os.path.exists(collapsed_conllu):
+            command = []
+            command.append('scripts/wrapper-collapse-empty-nodes.sh')
+            command.append(normal_conllu)
+            command.append(collapsed_conllu)
+            if options.debug:
+                print('Collapsing %s file...' %what)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            subprocess.call(command)
+        elif options.debug:
+            print('Re-using collapsed %s file' %what)
+    # run official shared task script evaluation script
+    # on collapsed files
     command = []
-    # TODO: support evaluation of enhanced UD with official shared task script
-    command.append('%s/scripts/wrapper-conll18-eval.sh' %os.environ['PRJ_DIR'])
+    command.append('scripts/iwpt20_xud_eval.py') # %os.environ['PRJ_DIR'])
     command.append('--output')
     command.append(outname)
     command.append('--verbose')
-    command.append(gold_path)
-    command.append(prediction_path)
+    command.append(collapsed['gold'])
+    command.append(collapsed['system'])
     if options.debug:
         print('Running', command)
-        sys.stderr.flush()
-        sys.stdout.flush()
+    sys.stderr.flush()
+    sys.stdout.flush()
     subprocess.call(command)
+    # TODO: adjust to new output format
+    raise NotImplementedError
     score = (0.0, 'N/A')
     with open(outname, 'rb') as f:
         for line in f:
