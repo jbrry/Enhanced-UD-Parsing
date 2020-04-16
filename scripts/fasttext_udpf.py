@@ -123,7 +123,9 @@ def predict(
     if model_path is None:
         raise ValueError('Request to predict with a model for which training is not supported')
     if not os.path.exists(model_path):
-        raise ValueError('Model %s not found' %model_path)
+        if options.debug:
+            print('Model %s not found' %model_path)
+        return False
     command = []
     command.append('scripts/fasttext_udpf-predict.sh')
     command.append(model_path)
@@ -131,7 +133,14 @@ def predict(
     command.append(conllu_output)
     if is_multi_treebank:
         command.append('--extra_input tbemb')  # split into 2 args by wrapper script
+    if options.debug:
+        print('Running', command)
+        sys.stderr.flush()
+        sys.stdout.flush()
     subprocess.call(command)
+    # TODO: check output more carefully,
+    #       e.g. check number of sentences (=number of empty lines)
+    return os.path.exists(conllu_output)
 
 def main():
     raise NotImplementedError

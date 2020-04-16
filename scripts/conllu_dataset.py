@@ -178,7 +178,7 @@ class ConlluDataset(basic_dataset.Dataset):
             f_out.write('\n')
         f_out.write('\n')
 
-def evaluate(prediction_path, gold_path, outname = None):
+def evaluate(prediction_path, gold_path, options, outname = None):
     if not outname:
         outname = prediction_path[:-7] + '.eval.txt'
     command = []
@@ -189,9 +189,10 @@ def evaluate(prediction_path, gold_path, outname = None):
     command.append('--verbose')
     command.append(gold_path)
     command.append(prediction_path)
-    print('Running', command)
-    sys.stderr.flush()
-    sys.stdout.flush()
+    if options.debug:
+        print('Running', command)
+        sys.stderr.flush()
+        sys.stdout.flush()
     subprocess.call(command)
     score = (0.0, 'N/A')
     with open(outname, 'rb') as f:
@@ -353,7 +354,12 @@ def get_filename_extension():
     ''' recommended extension for output files '''
     return '.conllu'
 
-def combine(prediction_paths, output_path, combiner_dir = None, seed = '42'):
+def combine(
+    prediction_paths, output_path,
+    options,
+    prune_labels = False,
+    combiner_dir = None, seed = '42'
+):
     ''' combine (ensemble) the given predictions
         into a single prediction
     '''
@@ -364,14 +370,16 @@ def combine(prediction_paths, output_path, combiner_dir = None, seed = '42'):
     command.append('--outfile')
     command.append(output_path)
     command.append('--overwrite')
-    command.append('--prune-labels')
+    if prune_labels:
+        command.append('--prune-labels')
     command.append('--seed')
     command.append(seed)
     for prediction_path in prediction_paths:
         command.append(prediction_path)
-    print('Running', command)
-    sys.stderr.flush()
-    sys.stdout.flush()
+    if options.debug:
+        print('Running', command)
+        sys.stderr.flush()
+        sys.stdout.flush()
     subprocess.call(command)
 
 class SentenceFilter:

@@ -25,6 +25,7 @@ import sys
 import time
 from collections import defaultdict
 
+import conllu_dataset
 import utilities
 
 class Options:
@@ -380,7 +381,7 @@ Options:
                     # evaluate: gold file is assumed to be in the same folder
                     # as the input text file with .conllu instead of .txt
                     gold_path = '%s/%s.conllu' %(tb_dir, prediction_name)
-                    conllu_dataset.evaluate(enhanced_path, gold_path)
+                    conllu_dataset.evaluate(enhanced_path, gold_path, self)
 
 class Config_default:
 
@@ -747,30 +748,44 @@ class Config_default:
         ensemble_predictions = []
         output_prefix = conllu_output[:-7]
         n_parses = len(self.basic_parsers)
-        parses_ready = 0
+        next_attempt = 1
         for parser_and_dataset, p_index in self.basic_parsers:
             parser_module, datasets = parser_and_dataset.split(':', 1)
             parser = importlib.import_module(parser_module)
             init_seed = '%s%02d' %(self.options.init_seed, p_index)
             conllu_individual_output = '%s-vote-%s-of-%s.conllu' %(
-                output_prefix, parses_ready + 1, n_parses
+                output_prefix, next_attempt, n_parses
             )
+            if os.path.exists(conllu_individual_output):
+                action = 'Reusing'
+                is_successful = True
+            else:
+                action = 'Predicting'
             if self.options.debug:
-                print('Predicting basic parse %d of %d for %s using %s trained on %s with seed %s' %(
-                    parses_ready + 1, n_parses,
+                print('%s basic parse %d of %d for %s using %s trained on %s with seed %s' %(
+                    action,
+                    next_attempt, n_parses,
                     conllu_input, parser_module, datasets,
                     init_seed,
                 ))
-            parser.predict(
-                self.lcode, init_seed, datasets, self.options,
-                conllu_input, conllu_individual_output,
-            )
-            parses_ready += 1
-            ensemble_predictions.append(conllu_individual_output)
-        # TODO: run combiner
-        # (there should be a function preparing the command line
-        # somewhere in the tt code)
-        raise NotImplementedError
+            if action == 'Predicting':
+                is_successful = parser.predict(
+                    self.lcode, init_seed, datasets, self.options,
+                    conllu_input, conllu_individual_output,
+                )
+            next_attempt += 1
+            if is_successful:
+                ensemble_predictions.append(conllu_individual_output)
+        if self.options.debug:
+            print('%d of %d basic parses are ready' %(len(ensemble_predictions), n_parses))
+        if not ensemble_predictions:
+            print('Warning: no basic parse for %s' %conllu_input)
+        elif len(ensemble_predictions) == 1:
+            # just 1 parse --> no combination
+            os.symlink(ensemble_predictions[0], conllu_output)
+        else:
+            # run combiner
+            conllu_dataset.combine(ensemble_predictions, conllu_output, self.options)
 
 
 class Config_with_more_datasets(Config_default):

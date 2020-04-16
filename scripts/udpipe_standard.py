@@ -91,5 +91,7 @@ def predict(lcode, init_seed, dataset, options, raw_input_file, conllu_output_fi
     command.append('--outfile=%s' %conllu_output_file)
     command.append(model_path)
     command.append(raw_input_file)
+    if options.debug:
+        print('Running', command)
     subprocess.call(command)
 
