@@ -460,7 +460,7 @@ class Config_default:
         return ['elmo_udpf', 'udify', 'fasttext_udpf', 'plain_udpf',]
 
     def get_enhanced_parser_names(self):
-        return ['copy_parse', 'enhanced_parser']
+        return ['copy_parse',]
 
     def get_basic_parser_ensemble_size(self):
         return 7
