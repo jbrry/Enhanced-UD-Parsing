@@ -33,6 +33,9 @@ def train_model_if_missing(lcode, init_seed, datasets, options):
     # simple, rule-based system --> nothing to train
     return None
 
+def get_model_id(lcode, init_seed, dataset, options):
+    return 'copy2e'
+
 def predict(lcode, init_seed, dataset, options, conllu_input_file, conllu_output_file):
     # copy basic parse to enhanced parse
     f_in = open(conllu_input_file, 'rb')

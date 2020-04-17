@@ -1080,6 +1080,7 @@ class NPZTasks:
         return self.tasks[-1].npz_file
 
     def wait(self):
+        start = time.time()
         while True:
             found_all = True
             for npz_file in self.get_npz_files():
@@ -1087,8 +1088,8 @@ class NPZTasks:
                     found_all = False
                     break
             if found_all:
-                break
-            time.sleep(2.0)
+                return time.time() - start
+            time.sleep(0.2)
 
     def cleanup(self):
         for npz_file in self.get_npz_files():
@@ -1175,6 +1176,11 @@ def train(
             os.rename(model_dir, error_name)
             raise ValueError('Model is missing essential files: ' + error_name)
 
+def get_model_id(lcode, init_seed, dataset, options):
+    return utilities.get_model_dir(
+        'elmo_udpf', lcode, init_seed, datasets, options,
+    )[1]
+
 def predict(
     lcode, init_seed, datasets, options,
     conllu_input, conllu_output,
@@ -1182,7 +1188,7 @@ def predict(
     is_multi_treebank = '+' in datasets
     model_path = utilities.get_model_dir(
         'elmo_udpf', lcode, init_seed, datasets, options,
-    )
+    )[0]
     if model_path is None:
         raise ValueError('Request to predict with a model for which training is not supported')
     if not os.path.exists(model_path):
@@ -1204,8 +1210,9 @@ def predict(
         print('Waiting for elmo npz file to be ready')
         sys.stderr.flush()
         sys.stdout.flush()
-    npz_tasks.wait()
+    waited_seconds = npz_tasks.wait()
     if options.debug:
+        print('Elmo npz file ready after %.1f seconds' %waited_seconds)
         print('Running', command)
     sys.stderr.flush()
     sys.stdout.flush()

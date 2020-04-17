@@ -38,7 +38,7 @@ ELMO_FILE_PREFIX=elmo
 
 ln -s $(realpath "${IN_NPZ}") ${WORKDIR}/${ELMO_FILE_PREFIX}-test.npz
 
-source ${PRJ_DIR}/config/locations.sh
+#source ${PRJ_DIR}/config/locations.sh
 
 PARSER_NAME=udpipe-future
 PARSER_DIR=${UDPIPE_FUTURE_DIR}

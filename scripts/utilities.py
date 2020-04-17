@@ -170,10 +170,16 @@ def get_model_dir(module_name, lcode, init_seed, datasets, options):
         module_name, len(init_seed), init_seed, datasets,
     ))
     h = hex2base62(h.hexdigest(), 5)[:5]
-    return '%s/%s-%s-%d-%s-%s-%s' %(
-        options.modeldir, lcode, module_name, datasets.count('+') + 1,
-        datasets.replace('.', '_'), init_seed, h
+    model_id = '%s-%d-%s-%s' %(
+        module_name, datasets.count('+') + 1,
+        datasets.replace('.', '_'), init_seed
     )
+    model_path = '%s/%s-%s-%s' %(
+        options.modeldir, lcode,
+        model_id,
+        h
+    )
+    return model_path, model_id
 
 def get_conllu_size(filename):
     n_tokens = 0
@@ -268,7 +274,7 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
     assert '.' in datasets
     model_dir = get_model_dir(
         module_name, lcode, init_seed, datasets, options,
-    )
+    )[0]
     if os.path.exists(model_dir):
         if options.debug:
             print('Not providing training details for model that already exists: %s' %model_dir)
