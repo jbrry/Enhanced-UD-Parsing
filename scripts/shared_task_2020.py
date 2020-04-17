@@ -667,7 +667,7 @@ class Config_default:
         self.enhanced_parser = self.variant[2]
         enhanced_module, datasets = self.enhanced_parser.split(':', 1)
         enhanced_parser = importlib.import_module(enhanced_module)
-        self.enhanced_id = enhanced_parser.get_model_id(
+        self.enhanced_parser_id = enhanced_parser.get_model_id(
             self.lcode,
             self.options.init_seed,
             datasets,
