@@ -1184,7 +1184,12 @@ def get_model_id(lcode, init_seed, dataset, options):
 def predict(
     lcode, init_seed, datasets, options,
     conllu_input, conllu_output,
+    proxy_tbid = None,
 ):
+    if proxy_tbid:
+        conllu_input = utilities.conllu_with_tbemb(
+            datasets, options, conllu_input, proxy_tbid
+        )
     is_multi_treebank = '+' in datasets
     model_path = utilities.get_model_dir(
         'elmo_udpf', lcode, init_seed, datasets, options,

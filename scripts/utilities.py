@@ -230,23 +230,67 @@ def get_conllu_concat_filename_and_size(
         # in case they are used to evaluate a multi-treebank model)
         os.symlink(datasets_with_conllu[0][1], filename)
         return filename, get_conllu_size(filename)
+    n_tokens = write_multi_treebank_conllu(filename, datasets_with_conllu)
+    return filename, n_tokens
+
+def write_multi_treebank_conllu(
+    filename, datasets_with_conllu,
+    random_choices = None
+):
     f_out = open(filename, 'wb')
     n_tokens = 0
     for dataset, conllu_file in datasets_with_conllu:
-        f_out.write(b'# tbemb = %s\n' %dataset)
         # copy dataset
         f_in = open(conllu_file, 'rb')
+        start_of_sentence = True
         while True:
             line = f_in.readline()
             if not line:
                 break
+            if start_of_sentence:
+                if dataset is None:
+                    f_out.write(b'# tbemb = %s\n' %dataset)
+                else:
+                    f_out.write(b'# tbemb = %s\n' %random.choice(random_choices))
             f_out.write(line)
             # count tokens
             if not line.startswith('#') and b'\t' in line:
                 n_tokens += 1
+            # Is next line a new sentence?
+            # Yes (true) if current line is empty
+            start_of_sentence = not line.rstrip()
         f_in.close()
     f_out.close()
-    return filename, n_tokens
+    return n_tokens
+
+def conllu_with_tbemb(datasets, options, conllu_input, proxy_tbid):
+    tbemb = None
+    all_tbemb = []
+    for dataset in sorted(datasets.split('+')):
+        if dataset.endswith(proxy_tbid):
+            tbemb = dataset
+            break
+        all_tbemb.append(dataset)
+    tbembdir = '%s/with-proxy' %options.tempdir
+    makedirs(tbembdir)
+    _, basename = conllu_input.rsplit('/', 1)
+    if basename.endswith('.conllu'):
+        basename = basename[:-7]
+    if tbemb:
+        filename = '%s/%s-proxy_%s.conllu' %(
+            tbembdir, basename, tbemb
+        )
+        write_multi_treebank_conllu(filename, [tbemb, conllu_input])
+    else:
+        all_tbemb.sort()
+        filename = '%s/%s-proxy_random_%s.conllu' %(
+            tbembdir, basename, '_'.join(all_tbemb)
+        )
+        write_multi_treebank_conllu(
+            filename, [None, conllu_input],
+            random_choices = all_tbemb
+        )
+    return filename
 
 def get_conllu_and_text_for_dataset(dataset, options, dataset_partition = 'train'):
     dataset_type, tbid = dataset.split('.')

@@ -339,6 +339,7 @@ Options:
                 prediction_name = text_filename[:-4]
                 for config in self.configs[tbid]:
                     print('\n==== %r ====\n' %config)
+                    # segmentation
                     segmented_path = '%s/%s-for-%s.conllu' %(
                         segment_dir,
                         config.segmenter_id,
@@ -351,6 +352,7 @@ Options:
                     if not os.path.exists(segmented_path):
                         print('Warning: Failure to produce %s' %segmented_path)
                         continue
+                    # basic parsing
                     basic_p_path = '%s/%s-%s-for-%s.conllu' %(
                         basic_p_dir,
                         config.segmenter_id,
@@ -364,6 +366,7 @@ Options:
                     if not os.path.exists(basic_p_path):
                         print('Warning: Failure to produce %s' %basic_p_path)
                         continue
+                    # enhanced parsing
                     enhanced_path = '%s/%s-%s-%s-for-%s.conllu' %(
                         enhanced_dir,
                         config.segmenter_id,
@@ -804,9 +807,15 @@ class Config_default:
                     init_seed,
                 ))
             if action == 'Predicting':
+                if '+' in datasets:
+                    # multi-treebank mode
+                    proxy_tbid = self.tbid
+                else:
+                    proxy_tbid = None
                 is_successful = parser.predict(
                     self.lcode, init_seed, datasets, self.options,
                     conllu_input, conllu_individual_output,
+                    proxy_tbid = proxy_tbid,
                 )
             next_attempt += 1
             if is_successful:
@@ -843,6 +852,7 @@ class Config_cs(Config_with_more_datasets):
         return [
             ('cs_cac', False),
             ('cs_pdt', False),
+            ('cs_cltt', False),
         ]
 
 class Config_en(Config_with_more_datasets):
@@ -855,7 +865,28 @@ class Config_en(Config_with_more_datasets):
             ('en_partut', False),
         ]
 
-class Config_ru_ftuture_syntagrus(Config_with_more_datasets):
+class Config_fr(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('fr_gsd', False),
+            ('fr_partut', False),
+            ('fr_sequoia', False),
+            ('fr_spoken', False),
+        ]
+
+class Config_it(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('it_isdt', False),
+            ('it_partut', False),
+            ('it_postwita', False),
+            ('it_twittiro', False),
+            ('it_vit', False),
+        ]
+
+class Config_ru(Config_with_more_datasets):
 
     def get_additional_dataset_tbids(self):
         return [
