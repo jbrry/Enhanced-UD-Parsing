@@ -249,7 +249,7 @@ def write_multi_treebank_conllu(
             if not line:
                 break
             if start_of_sentence:
-                if dataset is None:
+                if dataset is not None:
                     f_out.write(b'# tbemb = %s\n' %dataset)
                 else:
                     f_out.write(b'# tbemb = %s\n' %py_random.choice(random_choices))
