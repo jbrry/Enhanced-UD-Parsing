@@ -279,13 +279,13 @@ def conllu_with_tbemb(datasets, options, conllu_input, proxy_tbid):
         basename = basename[:-7]
     if tbemb:
         filename = '%s/%s-proxy_%s.conllu' %(
-            tbembdir, basename, tbemb
+            tbembdir, basename, tbemb.replace('.', '_')
         )
         write_multi_treebank_conllu(filename, [(tbemb, conllu_input),])
     else:
         all_tbemb.sort()
         filename = '%s/%s-proxy_random_%s.conllu' %(
-            tbembdir, basename, '_'.join(all_tbemb)
+            tbembdir, basename, '_'.join(all_tbemb).replace('.', '_')
         )
         write_multi_treebank_conllu(
             filename, [(None, conllu_input),],
