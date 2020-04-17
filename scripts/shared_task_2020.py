@@ -463,7 +463,7 @@ class Config_default:
         return ['copy_parse',]
 
     def get_basic_parser_ensemble_size(self):
-        return 7
+        return 3
 
     def get_segmenters(self):
         if self.options.debug:
@@ -608,9 +608,9 @@ class Config_default:
             elif self.options.debug:
                 print('\t\tLanguage %s is not supported' %self.lcode)
         retval.sort()
-        if len(retval) > 2:
+        if len(retval) > 1:
             print('\tPruning too long list of modules', retval)
-            retval = retval[:2]
+            retval = retval[:1]
         # remove priority
         retval = map(lambda x: x[1], retval)
         if self.options.debug:
@@ -757,16 +757,22 @@ class Config_default:
         )
 
     def parse(self, conllu_input, conllu_output):
+        votesdir = '%s/basic-parses/votes' %self.options.tempdir
+        utilities.makedirs(votesdir)
         ensemble_predictions = []
-        output_prefix = conllu_output[:-7]
+        _, vote_suffix = conllu_input.rsplit('/', 1)
         n_parses = len(self.basic_parsers)
         next_attempt = 1
         for parser_and_dataset, p_index in self.basic_parsers:
             parser_module, datasets = parser_and_dataset.split(':', 1)
             parser = importlib.import_module(parser_module)
             init_seed = '%s%02d' %(self.options.init_seed, p_index)
-            conllu_individual_output = '%s-vote-%s-of-%s.conllu' %(
-                output_prefix, next_attempt, n_parses
+            conllu_individual_output = '%s/%s-%s-%s-%s' %(
+                votesdir,
+                parser_module,
+                datasets.replace(':', '_').replace('-', '_'),
+                init_seed,
+                vote_suffix,
             )
             if os.path.exists(conllu_individual_output):
                 action = 'Reusing'
