@@ -10,6 +10,7 @@
 
 import hashlib
 import os
+import random as py_random
 import subprocess
 import time
 
@@ -251,7 +252,7 @@ def write_multi_treebank_conllu(
                 if dataset is None:
                     f_out.write(b'# tbemb = %s\n' %dataset)
                 else:
-                    f_out.write(b'# tbemb = %s\n' %random.choice(random_choices))
+                    f_out.write(b'# tbemb = %s\n' %py_random.choice(random_choices))
             f_out.write(line)
             # count tokens
             if not line.startswith('#') and b'\t' in line:
