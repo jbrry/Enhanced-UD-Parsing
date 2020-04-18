@@ -3,13 +3,13 @@ local char_embedding_dim = 64;
 local tag_embedding_dim = 50;
 local tag_combined_dim = 200;
 local embedding_dim = bert_embedding_dim + tag_combined_dim + char_embedding_dim + char_embedding_dim;
-local hidden_dim = 400;
+local hidden_dim = 600;
 local num_epochs = 75;
 local patience = 10;
 local learning_rate = 0.001;
-local dropout = 0.5;
-local input_dropout = 0.5;
-local recurrent_dropout_probability = 0.5;
+local dropout = 0.33;
+local input_dropout = 0.33;
+local recurrent_dropout_probability = 0.33;
 local model_name = std.extVar("MODEL_NAME");
 
 {
@@ -81,13 +81,13 @@ local model_name = std.extVar("MODEL_NAME");
         "input_size": embedding_dim,
         "hidden_size": hidden_dim,
         "num_layers": 3,
-        "recurrent_dropout_probability": recurrent_dropout_probability,
+        "recurrent_dropout_probability": 0.33,
         "use_highway": true
       },
       "arc_representation_dim": 500,
       "tag_representation_dim": 100,
-      "dropout": dropout,
-      "input_dropout": input_dropout,
+      "dropout": 0.33,
+      "input_dropout": 0.33,
       "initializer": {
         "regexes": [
           [".*projection.*weight", {"type": "xavier_uniform"}],

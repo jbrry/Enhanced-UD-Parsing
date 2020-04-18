@@ -339,9 +339,10 @@ Options:
                 prediction_name = text_filename[:-4]
                 for config in self.configs[tbid]:
                     print('\n==== %r ====\n' %config)
+                    # segmentation
                     segmented_path = '%s/%s-for-%s.conllu' %(
                         segment_dir,
-                        config.segmenter.replace(':', '_').replace('.', '_'),
+                        config.segmenter_id,
                         prediction_name
                     )
                     if not os.path.exists(segmented_path):
@@ -351,10 +352,11 @@ Options:
                     if not os.path.exists(segmented_path):
                         print('Warning: Failure to produce %s' %segmented_path)
                         continue
+                    # basic parsing
                     basic_p_path = '%s/%s-%s-for-%s.conllu' %(
                         basic_p_dir,
-                        config.segmenter.replace(':', '_').replace('.', '_'),
-                        config.basic_parser_short_name,
+                        config.segmenter_id,
+                        config.basic_parser_id,
                         prediction_name
                     )
                     if not os.path.exists(basic_p_path):
@@ -364,11 +366,12 @@ Options:
                     if not os.path.exists(basic_p_path):
                         print('Warning: Failure to produce %s' %basic_p_path)
                         continue
+                    # enhanced parsing
                     enhanced_path = '%s/%s-%s-%s-for-%s.conllu' %(
                         enhanced_dir,
-                        config.segmenter.replace(':', '_').replace('.', '_'),
-                        config.basic_parser_short_name,
-                        config.enhanced_parser.replace(':', '_').replace('.', '_'),
+                        config.segmenter_id,
+                        config.basic_parser_id,
+                        config.enhanced_parser_id,
                         prediction_name
                     )
                     if not os.path.exists(enhanced_path):
@@ -420,13 +423,12 @@ class Config_default:
         #       a component but different training data, e.g.
         #       udpipe_standard with english-ewt and
         #       udpipe_standard with english-gum
-        basic_parser_ensemble_size = self.get_basic_parser_ensemble_size()
         for segmenter in self.get_segmenters():
             basic_parsers = list(self.get_basic_parsers())
             # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
             n_basic_parsers = len(basic_parsers)
             restrict_to_one = False
-            if n_basic_parsers > 1:
+            if n_basic_parsers > 4:
                 # TODO: prune list of parser to k-best parsers according to dev results
                 found_dev_results = False
                 if found_dev_results:
@@ -446,12 +448,12 @@ class Config_default:
                     for j in range(n_basic_parsers)
                     if (combination_index & (1 << j))
                 ]
-                if len(combination) > basic_parser_ensemble_size:
-                    continue
                 if restrict_to_one and len(combination) > 1:
                     continue
                 for enhanced_parser in self.get_enhanced_parsers():
-                    yield (segmenter, combination, enhanced_parser)
+                    for ensemble_size in (3,5,7):
+                        if len(combination) <= ensemble_size:
+                            yield (segmenter, combination, enhanced_parser, ensemble_size)
 
     def get_segmenter_names(self):
         return ['udpipe_standard', 'udpipe_augmented', 'udpipe_polyglot', 'uusegmenter']
@@ -463,7 +465,7 @@ class Config_default:
         return ['copy_parse',]
 
     def get_basic_parser_ensemble_size(self):
-        return 3
+        return self.variant[3]
 
     def get_segmenters(self):
         if self.options.debug:
@@ -608,9 +610,9 @@ class Config_default:
             elif self.options.debug:
                 print('\t\tLanguage %s is not supported' %self.lcode)
         retval.sort()
-        if len(retval) > 1:
+        if len(retval) > 5:
             print('\tPruning too long list of modules', retval)
-            retval = retval[:1]
+            retval = retval[:5]
         # remove priority
         retval = map(lambda x: x[1], retval)
         if self.options.debug:
@@ -632,6 +634,14 @@ class Config_default:
 
     def init_segmenter(self):
         self.segmenter = self.variant[0]
+        segmenter_module, datasets = self.segmenter.split(':', 1)
+        segmenter = importlib.import_module(segmenter_module)
+        self.segmenter_id = segmenter.get_model_id(
+            self.lcode,
+            self.options.init_seed,
+            datasets,
+            self.options,
+        )
 
     def init_basic_parsers(self):
         self.basic_parsers = []
@@ -651,14 +661,24 @@ class Config_default:
         name = []
         name.append('e%d' %ensemble_size)
         for parser in parsers:
+            # TODO: cover case that the basic parser uses an off-the-shelf model
+            #       that ignores the dataset and/or init seed
             name.append(parser.replace(':', '_').replace('.', '_'))
-        self.basic_parser_short_name = '_'.join(name)
+        self.basic_parser_id = '_'.join(name)
 
     def init_enhanced_parser(self):
         self.enhanced_parser = self.variant[2]
+        enhanced_module, datasets = self.enhanced_parser.split(':', 1)
+        enhanced_parser = importlib.import_module(enhanced_module)
+        self.enhanced_parser_id = enhanced_parser.get_model_id(
+            self.lcode,
+            self.options.init_seed,
+            datasets,
+            self.options,
+        )
 
     def skip(self, skip_list):
-        segmenter, basic_parsers, enhanced_parser = self.variant
+        segmenter, basic_parsers, enhanced_parser, _ = self.variant
         if self.p_skip('segmenter', segmenter, skip_list):
             return True
         for basic_parser in basic_parsers:
@@ -787,20 +807,27 @@ class Config_default:
                     init_seed,
                 ))
             if action == 'Predicting':
+                if '+' in datasets:
+                    # multi-treebank mode
+                    proxy_tbid = self.tbid
+                else:
+                    proxy_tbid = None
                 is_successful = parser.predict(
                     self.lcode, init_seed, datasets, self.options,
                     conllu_input, conllu_individual_output,
+                    proxy_tbid = proxy_tbid,
                 )
             next_attempt += 1
             if is_successful:
                 ensemble_predictions.append(conllu_individual_output)
         if self.options.debug:
             print('%d of %d basic parses are ready' %(len(ensemble_predictions), n_parses))
-        if not ensemble_predictions:
-            print('Warning: no basic parse for %s' %conllu_input)
+        if len(ensemble_predictions) < n_parses:
+            print('Warning: missing basic parse(s) for ensemble --> skipping')
         elif len(ensemble_predictions) == 1:
             # just 1 parse --> no combination
-            os.symlink(ensemble_predictions[0], conllu_output)
+            link_target = os.path.abspath(ensemble_predictions[0])
+            os.symlink(link_target, conllu_output)
         else:
             # run combiner
             conllu_dataset.combine(ensemble_predictions, conllu_output, self.options)
@@ -826,6 +853,7 @@ class Config_cs(Config_with_more_datasets):
         return [
             ('cs_cac', False),
             ('cs_pdt', False),
+            ('cs_cltt', False),
         ]
 
 class Config_en(Config_with_more_datasets):
@@ -838,7 +866,28 @@ class Config_en(Config_with_more_datasets):
             ('en_partut', False),
         ]
 
-class Config_ru_ftuture_syntagrus(Config_with_more_datasets):
+class Config_fr(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('fr_gsd', False),
+            ('fr_partut', False),
+            ('fr_sequoia', False),
+            ('fr_spoken', False),
+        ]
+
+class Config_it(Config_with_more_datasets):
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('it_isdt', False),
+            ('it_partut', False),
+            ('it_postwita', False),
+            ('it_twittiro', False),
+            ('it_vit', False),
+        ]
+
+class Config_ru(Config_with_more_datasets):
 
     def get_additional_dataset_tbids(self):
         return [

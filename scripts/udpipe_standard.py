@@ -72,17 +72,27 @@ def train_model_if_missing(lcode, init_seed, dataset, options, max_tr_tokens = 2
     print('Using off-the-shelf udpipe model for %s, ignoring init_seed' %tbid)
     return None   # no task to wait for
 
-def predict(lcode, init_seed, dataset, options, raw_input_file, conllu_output_file):
+def select_model(lcode, dataset, debug = False):
     tbid = get_tbid_from_dataset(dataset)
     assert tbid.startswith(lcode)
     model_path = get_model_path(lcode, tbid)
-    if not model_path:
+    if model_path:
+        model_id = 'udpstd_' + tbid
+    else:
         # try without tbid
         model_path = get_model_path(lcode)
-        if model_path:
+        if not model_path:
+            raise ValueError('Missing udpipe standard segmenter model for %s' %lcode)
+        model_id = 'udpstd_' + lcode
+        if debug:
             print('Falling back to segmenting with %s for %s' %(lcode, tbid))
-    if not model_path:
-        raise ValueError('Missing udpipe standard segmenter model for %s' %lcode)
+    return model_path, model_id
+
+def get_model_id(lcode, init_seed, dataset, options):
+    return select_model(lcode, dataset)[1]
+
+def predict(lcode, init_seed, dataset, options, raw_input_file, conllu_output_file):
+    model_path = select_model(lcode, dataset, options.debug)[0]
     # assemble command line to run udpipe
     command = []
     command.append('bin/udpipe')  # TODO: support alternative locations
