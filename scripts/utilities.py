@@ -208,6 +208,8 @@ def get_conllu_concat_filename_and_size(
         datasets.replace('.', '_'), h,
     )
     if os.path.exists(filename):
+        if options.debug:
+            print('Re-using', filename)
         return filename, get_conllu_size(filename)
     datasets_with_conllu = []
     for dataset in datasets.split('+'):
@@ -229,17 +231,40 @@ def get_conllu_concat_filename_and_size(
         # no need to copy training files for mono-treebank models
         # (dev files with just one tbid may still need tbemb annotation
         # in case they are used to evaluate a multi-treebank model)
-        os.symlink(datasets_with_conllu[0][1], filename)
+        link_target = os.path.abspath(datasets_with_conllu[0][1])
+        os.symlink(link_target, filename)
         return filename, get_conllu_size(filename)
     n_tokens = write_multi_treebank_conllu(filename, datasets_with_conllu)
     return filename, n_tokens
 
+def get_conllu_subset(input_conllu_path, fraction, options):
+    subset_dir = '%s/subsets' %options.tempdir
+    makedirs(subset_dir)
+    _, basename = input_conllu_path.rsplit('/', 1)
+    if basename.endswith('.conllu'):
+        basename = basename[:-7]
+    frac_str = '%.6f' %fraction
+    subset_conllu_path = '%s/%s-%s.conllu' %(
+        subset_dir, basename, frac_str
+    )
+    n_tokens = write_multi_treebank_conllu(
+        subset_conllu_path,
+        [(None, input_conllu_path)],   # None = do not add tbemb tag
+        fraction = fraction,
+    )
+    if not n_tokens:
+        raise ValueError('Created empty subset even though first sentence should be included. Empty input %s?' %input_conllu_path)
+    return subset_conllu_path
+
 def write_multi_treebank_conllu(
     filename, datasets_with_conllu,
-    random_choices = None
+    random_choices = None,
+    fraction = 1.0,
 ):
     f_out = open(filename, 'wb')
-    n_tokens = 0
+    n_tokens_read = 0.0
+    n_tokens_copied = 0
+    copy_this_sentence = True
     for dataset, conllu_file in datasets_with_conllu:
         # copy dataset
         f_in = open(conllu_file, 'rb')
@@ -248,21 +273,26 @@ def write_multi_treebank_conllu(
             line = f_in.readline()
             if not line:
                 break
-            if start_of_sentence:
+            if start_of_sentence and fraction < 1.0 and n_tokens_read > 0:
+                copy_this_sentence = n_tokens_copied / n_tokens_read < fraction
+            if start_of_sentence and copy_this_sentence:
                 if dataset is not None:
                     f_out.write(b'# tbemb = %s\n' %dataset)
-                else:
+                elif random_choices:
                     f_out.write(b'# tbemb = %s\n' %py_random.choice(random_choices))
-            f_out.write(line)
+            if copy_this_sentence:
+                f_out.write(line)
             # count tokens
             if not line.startswith('#') and b'\t' in line:
-                n_tokens += 1
+                n_tokens_read += 1.0
+                if copy_this_sentence:
+                    n_tokens_copied += 1
             # Is next line a new sentence?
             # Yes (true) if current line is empty
             start_of_sentence = not line.rstrip()
         f_in.close()
     f_out.close()
-    return n_tokens
+    return n_tokens_copied
 
 def conllu_with_tbemb(datasets, options, conllu_input, proxy_tbid):
     tbemb = None
@@ -340,6 +370,10 @@ def get_training_details(lcode, init_seed, datasets, options, module_name, max_t
         )
         if test_data_path:
             monitoring_datasets.append(test_data_path)
+    if not monitoring_datasets:
+        # use 5% of training data to satisfy udpf's requirement
+        # for a test set --> scores will no be meaningful
+        test_data_path = get_conllu_subset(tr_data_filename, 0.05, options)
     epochs = 80
     while epochs * n_tokens > max_tr_tokens and epochs > 6:
         epochs -= 1

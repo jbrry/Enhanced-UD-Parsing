@@ -826,7 +826,8 @@ class Config_default:
             print('Warning: missing basic parse(s) for ensemble --> skipping')
         elif len(ensemble_predictions) == 1:
             # just 1 parse --> no combination
-            os.symlink(ensemble_predictions[0], conllu_output)
+            link_target = os.path.abspath(ensemble_predictions[0])
+            os.symlink(link_target, conllu_output)
         else:
             # run combiner
             conllu_dataset.combine(ensemble_predictions, conllu_output, self.options)
