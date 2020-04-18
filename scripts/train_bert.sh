@@ -48,7 +48,6 @@ for tbid in $TBIDS ; do
   export BATCH_SIZE=8
   export NUM_EPOCHS=75
   export CUDA_DEVICE=0
-  export GRAD_ACCUM_BATCH_SIZE=32
 
   if [ "$tbid" = "fr_sequoia" ] || [ "$tbid" = "ru_syntagrus" ]; then
     # lemmas, upos, feats

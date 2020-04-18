@@ -1,16 +1,11 @@
-local bert_embedding_dim = 768;
+local word_embedding_dim = 100;
 local char_embedding_dim = 64;
 local tag_embedding_dim = 50;
-local tag_combined_dim = 150;
-local embedding_dim = bert_embedding_dim + tag_combined_dim + char_embedding_dim + char_embedding_dim;
+local tag_combined_dim = 200;
+local embedding_dim = word_embedding_dim + tag_combined_dim + char_embedding_dim + char_embedding_dim;
 local hidden_dim = 400;
-local num_epochs = 75;
 local patience = 10;
 local learning_rate = 0.001;
-local dropout = 0.5;
-local input_dropout = 0.5;
-local recurrent_dropout_probability = 0.5;
-local model_name = std.extVar("MODEL_NAME");
 
 {
   "random_seed":  std.parseInt(std.extVar("RANDOM_SEED")),
@@ -18,14 +13,13 @@ local model_name = std.extVar("MODEL_NAME");
   "numpy_seed": std.parseInt(std.extVar("NUMPY_SEED")),
   "dataset_reader":{
     "type":"universal_dependencies_enhanced",
-     "token_indexers": {
-        "tokens": {
-          "type": "pretrained_transformer_mismatched",
-          "model_name": model_name
+      "token_indexers": {
+        "tokens": { 
+        "type": "single_id" 
         },
-        "token_characters": {
-          "type": "characters",
-          "min_padding_length": 3
+        "token_characters": { 
+        "type": "characters",
+        "min_padding_length": 3
         }
       }
     },
@@ -37,24 +31,24 @@ local model_name = std.extVar("MODEL_NAME");
       "text_field_embedder": {
         "token_embedders": {
           "tokens": {
-            "type": "pretrained_transformer_mismatched",
-            "model_name": model_name
-          },
-          "token_characters": {
-            "type": "character_encoding",
-            "embedding": {
-            "embedding_dim": char_embedding_dim,
-            "vocab_namespace": "token_characters"
-            },
-            "encoder": {
-            "type": "lstm",
-            "input_size": char_embedding_dim,
-            "hidden_size": char_embedding_dim,
-            "num_layers": 2,
-            "bidirectional": true
-            }
-          }
-        }
+            "type": "embedding",
+            "embedding_dim": word_embedding_dim,
+            "sparse": true
+           },
+           "token_characters": {
+             "type": "character_encoding",
+             "embedding": {
+               "embedding_dim": char_embedding_dim
+             },
+             "encoder": {
+               "type": "lstm",
+               "input_size": char_embedding_dim,
+               "hidden_size": char_embedding_dim,
+               "num_layers": 2,
+               "bidirectional": true
+             }
+           }
+        },
       },
       "lemma_tag_embedding":{
         "embedding_dim": tag_embedding_dim,
@@ -71,32 +65,25 @@ local model_name = std.extVar("MODEL_NAME");
         "vocab_namespace": "xpos",
         "sparse": true
       },
+      "feats_tag_embedding":{
+        "embedding_dim": tag_embedding_dim,
+       "vocab_namespace": "feats",
+        "sparse": true
+      },
       "encoder": {
         "type": "stacked_bidirectional_lstm",
         "input_size": embedding_dim,
         "hidden_size": hidden_dim,
         "num_layers": 3,
-        "recurrent_dropout_probability": recurrent_dropout_probability,
+        "recurrent_dropout_probability": 0.33,
         "use_highway": true
       },
       "arc_representation_dim": 500,
       "tag_representation_dim": 100,
-      "dropout": dropout,
-      "input_dropout": input_dropout,
-      "initializer": {
-        "regexes": [
-          [".*projection.*weight", {"type": "xavier_uniform"}],
-          [".*projection.*bias", {"type": "zero"}],
-          [".*tag_bilinear.*weight", {"type": "xavier_uniform"}],
-          [".*tag_bilinear.*bias", {"type": "zero"}],
-          [".*weight_ih.*", {"type": "xavier_uniform"}],
-          [".*weight_hh.*", {"type": "orthogonal"}],
-          [".*bias_ih.*", {"type": "zero"}],
-          [".*bias_hh.*", {"type": "lstm_hidden_bias"}]
-          ]
-        }
-      },
-      "data_loader": {
+      "dropout": 0.33,
+      "input_dropout": 0.33,
+    },
+    "data_loader": {
       "batch_sampler": {
         "type": "bucket",
         "sorting_keys": ["tokens"],
@@ -107,7 +94,7 @@ local model_name = std.extVar("MODEL_NAME");
     "trainer": {
       "num_epochs": std.parseInt(std.extVar("NUM_EPOCHS")),
       "grad_norm": 5.0,
-      "patience": patience,
+      "patience": 10,
       "cuda_device": std.parseInt(std.extVar("CUDA_DEVICE")),
       "validation_metric": "+labeled_f1",
       "optimizer": {

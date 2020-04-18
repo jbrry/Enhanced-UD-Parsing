@@ -45,7 +45,6 @@ for tbid in $TBIDS ; do
   export BATCH_SIZE=8
   export NUM_EPOCHS=50
   export CUDA_DEVICE=0
-  export GRAD_ACCUM_BATCH_SIZE=32
 
   for filepath in ${TB_DIR}/*/${tbid}-ud-train.conllu; do
     dir=`dirname $filepath`        # e.g. /home/user/ud-treebanks-v2.2/UD_Afrikaans-AfriBooms
@@ -55,8 +54,9 @@ for tbid in $TBIDS ; do
     export TRAIN_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-train.conllu
     export DEV_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-dev.conllu
     export TEST_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-test.conllu
-
-    allennlp train configs/ud_${TASK}_${MODEL_TYPE}.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED}-${TIMESTAMP} --include-package tagging
+                   
+    #configs/ud_enhanced_dm_luxf.jsonnet
+    allennlp train configs/ud_${TASK}_${MODEL_TYPE}_luxf.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED}-${TIMESTAMP} --include-package tagging
   done
 done
 
