@@ -165,8 +165,80 @@ def get_project_dir():
     return os.path.dirname(os.getcwd())
 
 def get_model_dir(module_name, lcode, init_seed, datasets, options):
-    if not os.path.exists(options.modeldir):
-        makedirs(options.modeldir)
+    if 'udpf' in module_name.split('_'):
+        return get_udpf_model_dir(module_name, lcode, init_seed, datasets, options)
+    elif module_name.startswith('allennlp_'):
+        return get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options)
+    else:
+        raise ValueError('get_model_dir() with module_name %s' %module_name)
+
+def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
+    module_fields = module_name.split('_')
+    # example: [0] [1] [2] [3]  [4]
+    #     allennlp_090_dm_mbert_luxf
+    allennlp_modeldir = '%s/allennlp-%s' %(options.modeldir, module_fields[1])
+    candidates = []
+    now = time.time()
+    if options.debug:
+        print('Scanning %s for %s with %s and %s' %(
+            allennlp_modeldir, module_name, lcode, datasets
+        )
+    for candidate_model in sorted(os.listdir(allennlp_modeldir)):
+        fields = candidate_model.split('-')
+        # example: [0] [1]    [2] [3] [4]  [5] [6]      [7]
+        #      en_ewt-enhanced-dm-en-BERT-luxf-20200417-060431
+        reject_reason = None
+        if not fields[0].startswith(lcode):
+            reject_reason = 'wrong lcode'
+        if fields[1] != 'enhanced':
+            reject_reason = 'not for enhanced parsing'
+        if fields[2] != module_fields[2]:
+            reject_reason = 'dm/kg mismatch'
+        if fields[5] != module_fields[4]:
+            reject_reason = 'not the right input features'
+        if module_fields[3] == 'mbert':
+            if fields[3] != 'mbert':
+                reject_reason = 'not an mbert model'
+        elif module_fields[3] == 'pbert':
+            # polyglotly fine-tuned mbert
+            if not '_' in fields[3]:
+                reject_reason = 'list of bert languages too short'
+        elif module_fields[3] == 'lbert':
+            # language-specific bert
+            if fields[3] != lcode:
+                print('Warning: Found allennlp model for %s using BERT for %s' %(lcode, fields[3]))
+        else:
+            raise ValueError('Unsupported allennlp BERT type')
+        model_file = '%s/%s/model.tar.gz' %(allennlp_modeldir, candidate_model)
+        if not os.path.exits(model_file):
+            reject_reason = 'missing model.tar.gz'
+        if not reject_reason:
+            model_tbid = fields[0]
+            priority = 1
+            details = 'tbid mismatch'
+            model_id = '%s_%s' %(model_name, lcode)
+            for dataset in datasets.split('+'):
+                dataset_tbid = dataset.split('.')[-1]
+                if model_tbid == dataset_tbid:
+                    priority = 0
+                    details = 'tbid match'
+                    model_id = '%s_%s' %(model_name, model_tbid)
+                    break
+            model_age = now - os.path.getmtime(model_file)
+            candidates.append((priority, model_age, candidate_model, model_id))
+            if options.debug:
+                print('\t%s\t-->\tOK (%s)' %(candidate_model, details))
+        elif options.debug:
+            print('\t%s\t-->\t%s' %(candidate_model, reject_reason))
+    if not candidates:
+        return None, 'none'
+    candidates.sort()
+    _, _, model_dir, model_id = candidates[0]
+    return model_dir, model_id
+
+def get_udpf_model_dir(module_name, lcode, init_seed, datasets, options):
+    udpf_modeldir = '/'.join(options.modeldir, 'udpf')
+    makedirs(udpf_modeldir)
     h = hashlib.sha256('%s:%d:%s:%s' %(
         module_name, len(init_seed), init_seed, datasets,
     ))
@@ -176,7 +248,7 @@ def get_model_dir(module_name, lcode, init_seed, datasets, options):
         datasets.replace('.', '_'), init_seed
     )
     model_path = '%s/%s-%s-%s' %(
-        options.modeldir, lcode,
+        udpf_modeldir, lcode,
         model_id,
         h
     )
