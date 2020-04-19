@@ -27,20 +27,17 @@ SEED=$5
 # run python utils/get_training_information.py to get training metadata.
 
 # L-BERT
-JOB_A="bg_btb cs_fictree en_ewt"
+JOB_A="bg_btb cs_fictree en_ewt fi_tdt"
 JOB_B="pl_pdb fr_sequoia nl_lassysmall nl_alpino"
 
 # M-BERT
 JOB_C="lv_lvtb lt_alksnis pl_lfg"
-#JOB_D="sk_snk ta_ttb uk_iu sk_snk"
-JOB_D="sk_snk"
-
-
-#JOB_D="uk_iu fi_tdt"
+JOB_D="ta_ttb et_ewt uk_iu sk_snk"
 
 # High memory
-JOB_E="cs_pdt fi_tdt it_isdt"
+JOB_E="cs_pdt it_isdt"
 JOB_F="ar_padt ru_syntagrus sv_talbanken cs_cac"
+# fi_tdt
 
 
 if [ ${JOB} == "A" ]; then
