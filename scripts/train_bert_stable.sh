@@ -52,12 +52,6 @@ for tbid in $TBIDS ; do
   export NUM_EPOCHS=75
   export CUDA_DEVICE=0
  
-  CONFIG=configs/stable/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}.jsonnet
-
-  if [ "$tbid" = "et_ewt" ]; then
-    CONFIG=configs/stable/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}_no_dev.jsonnet
-  fi
-
   #if [ "$tbid" = "fr_sequoia" ] || [ "$tbid" = "ru_syntagrus" ]; then
     # lemmas, upos, feats
   #  FEATS=luf
@@ -65,7 +59,14 @@ for tbid in $TBIDS ; do
     # lemmas, upos, xpos, feats
   #  FEATS=luxf
   #fi
+  
   FEATS=u
+  CONFIG=configs/stable/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}.jsonnet
+
+  if [ "$tbid" = "et_ewt" ]; then
+    CONFIG=configs/stable/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}_no_dev.jsonnet
+  fi
+
 
   for filepath in ${TB_DIR}/*/${tbid}-ud-train.conllu; do
     dir=`dirname $filepath`        # e.g. /home/user/ud-treebanks-v2.2/UD_Afrikaans-AfriBooms
