@@ -24,6 +24,57 @@ conda activate enhanced_parsing
 
 This project uses AllenNLP [installed from the master branch](https://github.com/allenai/allennlp#installing-from-source) and the most recent version of the [conllu](https://github.com/EmilStenstrom/conllu) library. If you install AllenNLP from master you should have the required version.
 
+### Supporting prediction with both stable and bleeding edge
+
+Here we are testing with Python 3.6.
+
+#### Virtual environment for stable 0.9.0
+
+Check that 0.9.0 is the most recent stable. 1.0.0 could be there any moment now.
+
+```
+mkdir venv
+cd venv
+virtualenv -p /usr/bin/python3.6 allennlp-090
+```
+If needed, edit `allennlp-090/bin/activate` to configure your CUDA environment, e.g.
+```
+# Manually added configuration
+LD_LIBRARY_PATH=/usr/local/cuda-10.1/lib64:"$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH
+```
+
+Activate and install packages:
+```
+source allennlp-090/bin/activate
+pip install torch torchvision
+pip install cython
+pip install allennlp
+exit
+
+#### Virtual environment for bleeding edge 
+
+```
+mkdir venv
+cd venv
+virtualenv -p /usr/bin/python3.6 allennlp-dev
+```
+If needed, edit `allennlp-dev/bin/activate` to configure your CUDA environment, e.g.
+```
+# Manually added configuration
+LD_LIBRARY_PATH=/usr/local/cuda-10.1/lib64:"$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH
+```
+
+Activate and install packages:
+```
+source allennlp-dev/bin/activate
+pip install torch torchvision
+pip install cython
+pip install allennlp==1.0.0.dev20200418
+exit
+```
+
 ## Obtain data
 You will need to obtain the official shared task training and development data:
 
