@@ -221,11 +221,18 @@ class EnhancedParser(Model):
 
         if metadata:
             output_dict["ids"] = [meta["ids"] for meta in metadata]
-            output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]  #      metadata["original_to_new_indices"] #[meta["ids"] for meta in metadata]
             output_dict["tokens"] = [meta["tokens"] for meta in metadata]
+            output_dict["lemmas"] = [meta["lemmas"] for meta in metadata]
+            output_dict["upos"] = [meta["upos_tags"] for meta in metadata]
+            output_dict["xpos"] = [meta["xpos_tags"] for meta in metadata]
+            output_dict["feats"] = [meta["feats"] for meta in metadata]
             output_dict["head_tags"] = [meta["head_tags"] for meta in metadata]
-            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata]
-            
+            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata] 
+            output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]
+            output_dict["multiword_ids"] = [x["multiword_ids"] for x in metadata if "multiword_ids" in x]
+            output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x] 
+
+
 
         if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(arc_scores=arc_scores,
