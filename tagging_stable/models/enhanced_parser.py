@@ -205,7 +205,8 @@ class EnhancedParser(Model):
         # Switch to (batch_size, sequence_length, sequence_length, num_tags)
         arc_tag_logits = arc_tag_logits.permute(0, 2, 3, 1).contiguous()
 
-        minus_inf = -1e8
+        
+        minus_inf = 1e-13 #-1e8
         minus_mask = (1 - float_mask) * minus_inf
         arc_scores = arc_scores + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
 
@@ -232,13 +233,12 @@ class EnhancedParser(Model):
             output_dict["multiword_ids"] = [x["multiword_ids"] for x in metadata if "multiword_ids" in x]
             output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x] 
 
-
-
         if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(arc_scores=arc_scores,
                                                     arc_tag_logits=arc_tag_logits,
                                                     enhanced_tags=enhanced_tags,
                                                     mask=mask)
+            
             output_dict["loss"] = arc_nll + tag_nll
             output_dict["arc_loss"] = arc_nll
             output_dict["tag_loss"] = tag_nll
