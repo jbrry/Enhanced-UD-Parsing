@@ -340,6 +340,9 @@ Options:
                 for config in self.configs[tbid]:
                     print('\n==== %r ====\n' %config)
                     # segmentation
+                    if config.segmenter_id is None:
+                        print('Segmenter not ready, e.g. missing model')
+                        continue
                     segmented_path = '%s/%s-for-%s.conllu' %(
                         segment_dir,
                         config.segmenter_id,
@@ -353,6 +356,9 @@ Options:
                         print('Warning: Failure to produce %s' %segmented_path)
                         continue
                     # basic parsing
+                    if config.basic_parser_id is None:
+                        print('Basic parser not ready, e.g. missing model')
+                        continue
                     basic_p_path = '%s/%s-%s-for-%s.conllu' %(
                         basic_p_dir,
                         config.segmenter_id,
@@ -367,6 +373,9 @@ Options:
                         print('Warning: Failure to produce %s' %basic_p_path)
                         continue
                     # enhanced parsing
+                    if config.enhanced_parser_id is None:
+                        print('Enhanced parser not ready, e.g. missing model')
+                        continue
                     enhanced_path = '%s/%s-%s-%s-for-%s.conllu' %(
                         enhanced_dir,
                         config.segmenter_id,
@@ -381,6 +390,8 @@ Options:
                     if not os.path.exists(enhanced_path):
                         print('Warning: Failure to produce %s' %enhanced_path)
                         continue
+                    # TODO: add post-processor here
+                    # --
                     # evaluate: gold file is assumed to be in the same folder
                     # as the input text file with .conllu instead of .txt
                     gold_path = '%s/%s.conllu' %(tb_dir, prediction_name)
@@ -462,7 +473,19 @@ class Config_default:
         return ['elmo_udpf', 'udify', 'fasttext_udpf', 'plain_udpf',]
 
     def get_enhanced_parser_names(self):
-        return ['copy_parse',]
+        retval = []
+        retval.append('copy_parse')
+        for allennlp_version in '090 dev'.split():
+            for ptype in 'dm kg'.split():
+                for bert in 'mbert lbert pbert'.split():
+                    for feats in 'u lux luxf luxfb'.split():
+                        retval.append('allennlp_%s_%s_%s_%s' %(
+                            allennlp_version,
+                            ptype,
+                            bert,
+                            feats,
+                        ))
+        return retval
 
     def get_basic_parser_ensemble_size(self):
         return self.variant[3]
