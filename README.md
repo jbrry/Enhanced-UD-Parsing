@@ -51,6 +51,7 @@ pip install torch torchvision
 pip install cython
 pip install allennlp
 exit
+```
 
 #### Virtual environment for bleeding edge 
 
