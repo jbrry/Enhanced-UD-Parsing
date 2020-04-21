@@ -805,44 +805,55 @@ class Config_default:
         ensemble_predictions = []
         _, vote_suffix = conllu_input.rsplit('/', 1)
         n_parses = len(self.basic_parsers)
-        next_attempt = 1
-        for parser_and_dataset, p_index in self.basic_parsers:
+        pad2freq = defaultdict(lambda: 0)
+        for parser_and_dataset, _ in self.basic_parsers:
+            pad2freq[parser_and_dataset] += 1
+        for parser_and_dataset in sorted(list(pad2freq.keys())):
             parser_module, datasets = parser_and_dataset.split(':', 1)
             parser = importlib.import_module(parser_module)
-            init_seed = '%s%02d' %(self.options.init_seed, p_index)
-            conllu_individual_output = '%s/%s-%s-%s-%s' %(
-                votesdir,
-                parser_module,
-                datasets.replace(':', '_').replace('-', '_'),
-                init_seed,
-                vote_suffix,
-            )
-            if os.path.exists(conllu_individual_output):
-                action = 'Reusing'
-                is_successful = True
-            else:
-                action = 'Predicting'
-            if self.options.debug:
-                print('%s basic parse %d of %d for %s using %s trained on %s with seed %s' %(
-                    action,
-                    next_attempt, n_parses,
-                    conllu_input, parser_module, datasets,
+            number_parses_needed = pad2freq[parser_and_dataset]
+            patience_at_start = 5
+            patience_left = patience_at_start
+            p_index = 0
+            while number_parses_needed > 0 and patience_left > 0:
+                init_seed = '%s%02d' %(self.options.init_seed, p_index)
+                conllu_individual_output = '%s/%s-%s-%s-%s' %(
+                    votesdir,
+                    parser_module,
+                    datasets.replace(':', '_').replace('-', '_'),
                     init_seed,
-                ))
-            if action == 'Predicting':
-                if '+' in datasets:
-                    # multi-treebank mode
-                    proxy_tbid = self.tbid
-                else:
-                    proxy_tbid = None
-                is_successful = parser.predict(
-                    self.lcode, init_seed, datasets, self.options,
-                    conllu_input, conllu_individual_output,
-                    proxy_tbid = proxy_tbid,
+                    vote_suffix,
                 )
-            next_attempt += 1
-            if is_successful:
-                ensemble_predictions.append(conllu_individual_output)
+                if os.path.exists(conllu_individual_output):
+                    action = 'Reusing'
+                    is_successful = True
+                else:
+                    action = 'Predicting'
+                if self.options.debug:
+                    print('%s basic parse for %s using %s trained on %s with seed %s' %(
+                        action,
+                        conllu_input, parser_module, datasets,
+                        init_seed,
+                    ))
+                if action == 'Predicting':
+                    if '+' in datasets:
+                        # multi-treebank mode
+                        proxy_tbid = self.tbid
+                    else:
+                        proxy_tbid = None
+                    is_successful = parser.predict(
+                        self.lcode, init_seed, datasets, self.options,
+                        conllu_input, conllu_individual_output,
+                        proxy_tbid = proxy_tbid,
+                    )
+                if is_successful:
+                    ensemble_predictions.append(conllu_individual_output)
+                    number_parses_needed -= 1
+                    patience_left= patience_at_start
+                else:
+                    patience_left -= 1
+                    if self.options.debug:
+                        print('Parse failed.')
         if self.options.debug:
             print('%d of %d basic parses are ready' %(len(ensemble_predictions), n_parses))
         if len(ensemble_predictions) < n_parses:
