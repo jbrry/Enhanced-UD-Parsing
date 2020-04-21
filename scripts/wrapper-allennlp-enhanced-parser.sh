@@ -43,7 +43,7 @@ allennlp predict  \
     --use-dataset-reader               \
     --silent
   
-if [ -e ${OUTPUT_FILE}.woc ]; then
+if [ -e ${OUTPUT_FILE}_woc ]; then
     scripts/restore-conllu-comments-and-more.py ${INPUT_FILE} < ${OUTPUT_FILE}_woc > ${OUTPUT_FILE}
     rm ${OUTPUT_FILE}_woc
 else
