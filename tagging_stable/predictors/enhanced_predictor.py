@@ -7,7 +7,6 @@ from allennlp.common.util import JsonDict, sanitize
 from allennlp.data import DatasetReader, Instance
 from allennlp.models import Model
 from allennlp.predictors.predictor import Predictor
-sentence_index = 0
 
 @Predictor.register("enhanced-predictor")
 class EnhancedPredictor(Predictor):
@@ -62,13 +61,9 @@ class EnhancedPredictor(Predictor):
 
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
-        #global sentence_index
-        #sentence_index += 1
-        #sent_id = ('# sent_id = ' + str(sentence_index))
-        #text = ('# text = ' + ' '.join(w for w in outputs["tokens"]))
-
+        
+        conllu_metadata = outputs["conllu_metadata"]
         word_count = len([word for word in outputs["tokens"]])
-
         predicted_arcs = outputs["arcs"]
         predicted_arc_tags = outputs["arc_tags"]
         
@@ -135,7 +130,7 @@ class EnhancedPredictor(Predictor):
                 
         lines = zip(*[outputs[k] if k in outputs else ["_"] * word_count
                       for k in ["ids", "tokens", "lemmas", "upos", "xpos", "feats",
-                                "head_indices", "head_tags", "arc_tags"]]) # TODO MISC
+                                "head_indices", "head_tags", "arc_tags", "misc"]])
 
         multiword_map = None
         if outputs["multiword_ids"]:
@@ -156,5 +151,5 @@ class EnhancedPredictor(Predictor):
             row = "\t".join(line) + "".join(["\t_"] * 1)
             output_lines.append(row)
 
-        #output_lines = [sent_id] + [text] + output_lines
+        output_lines = conllu_metadata + output_lines
         return "\n".join(output_lines) + "\n\n"

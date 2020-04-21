@@ -165,6 +165,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             logger.info("Reading UD instances from conllu dataset at: %s", file_path)
             
             for annotation in parse_incr(conllu_file):
+                conllu_metadata = []
+                metadata = annotation.metadata
+                for k, v in metadata.items():
+                    metadata_line = (f"# {k} = {v}")
+                    conllu_metadata.append(metadata_line)
+    
                 self.contains_elided_token = False
                 annotation = process_multiword_and_elided_tokens(annotation)
                 multiword_tokens = [x for x in annotation if x["multi_id"] is not None]
@@ -186,21 +192,23 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 ids = [x["id"] for x in annotation]
                 multiword_ids = [x["multi_id"] for x in multiword_tokens]
                 multiword_forms = [x["form"] for x in multiword_tokens]
-                
                 tokens = get_field("form")
                 lemmas = get_field("lemma")
                 upos_tags = get_field("upostag")
                 xpos_tags = get_field("xpostag")
                 feats = get_field("feats", lambda x: "|".join(k + "=" + v for k, v in x.items())
                                      if hasattr(x, "items") else "_")
+                misc = get_field("misc", lambda x: "".join(k + "=" + v for k, v in x.items())
+                                    if hasattr(x, "items") else "_")
+                                
                 heads = get_field("head")
                 dep_rels = get_field("deprel")
                 dependencies = list(zip(dep_rels, heads))
                 deps = get_field("deps")
                    
                 yield self.text_to_instance(tokens, lemmas, upos_tags, xpos_tags,
-                                            feats, dependencies, deps, ids, 
-                                            multiword_ids, multiword_forms)
+                                            feats, dependencies, deps, ids, misc,
+                                            multiword_ids, multiword_forms, conllu_metadata)
      
     @overrides
     def text_to_instance(
@@ -213,8 +221,10 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         dependencies: List[Tuple[str, int]] = None,
         deps: List[List[Tuple[str, int]]] = None,
         ids: List[str] = None,
+        misc: List[str] = None,
         multiword_ids: List[str] = None,
         multiword_forms: List[str] = None,
+        conllu_metadata: List[str] = None,
         contains_elided_token: bool = False,
     ) -> Instance:
 
@@ -317,6 +327,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             "feats": feats,
             "lemmas": lemmas,
             "ids": ids,
+            "misc": misc,
             "original_to_new_indices": original_to_new_indices,
             "head_tags": head_tags,
             "head_indices": head_indices,
@@ -324,7 +335,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             "arc_tags": arc_tags,
             "labeled_arcs": arc_indices_and_tags,
             "multiword_ids": multiword_ids,
-            "multiword_forms": multiword_forms
+            "multiword_forms": multiword_forms,
+            "conllu_metadata": conllu_metadata
         })
 
         return Instance(fields)
