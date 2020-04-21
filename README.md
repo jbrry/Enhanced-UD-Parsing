@@ -50,6 +50,7 @@ source allennlp-090/bin/activate
 pip install torch torchvision
 pip install cython
 pip install allennlp
+pip install -U conllu
 exit
 ```
 
@@ -73,6 +74,7 @@ source allennlp-dev/bin/activate
 pip install torch torchvision
 pip install cython
 pip install allennlp==1.0.0.dev20200418
+pip install -U conllu
 exit
 ```
 
