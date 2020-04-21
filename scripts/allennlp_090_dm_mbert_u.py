@@ -64,14 +64,23 @@ def predict(
         command.append('tagging')
     else:
         raise ValueError('Allennlp version %s not implemented' %allennlp_version)
+    # insert dummy enhanced dependencies expected by the parser's conllu reader
+    conllu_input_copy2enh = conllu_input + '_c2e'
+    copy_parse.predict(
+        lcode, init_seed, dataset, options,
+        conllu_input, conllu_input_copy2enh
+    )
+    # compile command to run
     command.append(model_path)
-    command.append(conllu_input)
+    command.append(conllu_input_copy2enh)
     command.append(conllu_output)
     if options.debug:
         print('Running', command)
     sys.stderr.flush()
     sys.stdout.flush()
     subprocess.call(command)
+    # cleanup _c2e file
+    os.unlink(conllu_input_copy2enh)
     # TODO: check output more carefully,
     #       e.g. check number of sentences (=number of empty lines)
     return os.path.exists(conllu_output)
