@@ -43,9 +43,13 @@ def main():
                 # --> calculate union and output in sorted order
                 misc_elemets = set()
                 for misc in (fields1[9], fields2[9]):
-                    for element in misc.split('|'):
-                        misc_elemets.add(element)
-                fields2[9] = '|'.join(sorted(list(misc_elemets)))
+                    for element in misc.rstrip().split('|'):
+                        if element != '_':
+                            misc_elemets.add(element)
+                if misc_elemets:
+                    fields2[9] = '|'.join(sorted(list(misc_elemets)))
+                else:
+                    fields2[9] = '_'    
                 if len(fields2) == 10:
                     # this is the last field --> newline needed
                     fields2[9] = fields2[9] + '\n'
