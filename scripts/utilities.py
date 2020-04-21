@@ -182,7 +182,7 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
     if options.debug:
         print('Scanning %s for %s with %s and %s' %(
             allennlp_modeldir, module_name, lcode, datasets
-        )
+        ))
     for candidate_model in sorted(os.listdir(allennlp_modeldir)):
         fields = candidate_model.split('-')
         # example: [0] [1]    [2] [3] [4]  [5] [6]      [7]
@@ -210,19 +210,19 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
         else:
             raise ValueError('Unsupported allennlp BERT type')
         model_file = '%s/%s/model.tar.gz' %(allennlp_modeldir, candidate_model)
-        if not os.path.exits(model_file):
+        if not os.path.exists(model_file):
             reject_reason = 'missing model.tar.gz'
         if not reject_reason:
             model_tbid = fields[0]
             priority = 1
             details = 'tbid mismatch'
-            model_id = '%s_%s' %(model_name, lcode)
+            model_id = '%s_%s' %(module_name, lcode)
             for dataset in datasets.split('+'):
                 dataset_tbid = dataset.split('.')[-1]
                 if model_tbid == dataset_tbid:
                     priority = 0
                     details = 'tbid match'
-                    model_id = '%s_%s' %(model_name, model_tbid)
+                    model_id = '%s_%s' %(module_name, model_tbid)
                     break
             model_age = now - os.path.getmtime(model_file)
             candidates.append((priority, model_age, candidate_model, model_id))

@@ -19,6 +19,8 @@ import os
 import subprocess
 import sys
 
+import utilities
+
 def supports_lcode(lcode, tbid = None):
     return True
 
@@ -37,7 +39,7 @@ def train_model_if_missing(lcode, init_seed, datasets, options):
 def get_model_id(lcode, init_seed, dataset, options):
     return utilities.get_model_dir(
         __name__,   # current module's name
-        lcode, init_seed, datasets, options,
+        lcode, init_seed, dataset, options,
     )[1]
 
 def predict(
