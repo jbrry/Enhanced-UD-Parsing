@@ -31,10 +31,25 @@ def main():
                 line2 = None
                 continue
             break
-        id1 = line1.split('\t')[0]
-        id2 = line2.split('\t')[0]
+        fields1 = line1.split('\t')
+        fields2 = line2.split('\t')
+        id1 = fields1[0]
+        id2 = fields2[0]
         if id1 == id2:
             # lines are in sync --> use more complete annotation
+            if len(fields1) >= 10 and len(fields2) >= 10  \
+            and fields2[9] != fields1[9]:
+                # MISC columns do not match
+                # --> calculate union and output in sorted order
+                misc_elemets = set()
+                for misc in (fields1[9], fields2[9]):
+                    for element in misc.split('|'):
+                        misc_elemets.add(element)
+                fields2[9] = '|'.join(sorted(list(misc_elemets)))
+                if len(fields2) == 10:
+                    # this is the last field --> newline needed
+                    fields2[9] = fields2[9] + '\n'
+                line2 = '\t'.join(fields2)
             sys.stdout.write(line2)
             line2 = None
             continue
