@@ -12,7 +12,7 @@ test -z $3 && echo "Missing model dir"
 test -z $3 && exit 1
 MODEL_DIR=$3
 
-test -z $4 && echo "Missing input conllu file"
+test -z $4 && echo "Missing input conllu file (with placeholder enhanced dependencies)"
 test -z $4 && exit 1
 INPUT_FILE=$4
 
@@ -29,18 +29,23 @@ fi
 
 # activate environment
 source ${PRJ_DIR}/Enhanced-UD-Parsing/venv/allennlp-${ALLENNLP_VERSION}/bin/activate
-  
+
+# debugging
+echo "sourced ${PRJ_DIR}/Enhanced-UD-Parsing/venv/allennlp-${ALLENNLP_VERSION}/bin/activate"
+echo "using package $PACKAGE"
+
 allennlp predict  \
     ${MODEL_DIR}/model.tar.gz        \
     ${INPUT_FILE}                      \
-    --output-file ${OUTPUT_FILE}.part  \
+    --output-file ${OUTPUT_FILE}_woc  \
     --predictor enhanced-predictor     \
     --include-package "$PACKAGE"       \
     --use-dataset-reader               \
     --silent
   
-if [ -e ${OUTPUT_FILE}.part ]; then
-    mv ${OUTPUT_FILE}.part ${OUTPUT_FILE}
+if [ -e ${OUTPUT_FILE}.woc ]; then
+    scripts/restore-conllu-comments-and-more.py ${INPUT_FILE} < ${OUTPUT_FILE}_woc > ${OUTPUT_FILE}
+    rm ${OUTPUT_FILE}_woc
 else
     echo "Error: No output file"
 fi
