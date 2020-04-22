@@ -36,7 +36,7 @@ class EnhancedPredictor(Predictor):
 
     @overrides
     def predict_instance(self, instance: Instance) -> JsonDict:
-        if "@@UNKNOWN@@" not in self._model.vocab._token_to_index["arc_tags"]:
+        if "@@UNKNOWN@@" not in self._model.vocab._token_to_index["labels"]:
             # Handle cases where the labels are present in the test set but not training set
             # https://github.com/Hyperparticle/udify/blob/b6a1173e7e5fc1e4c63f4a7cf1563b469268a3b8/udify/predictors/predictor.py
             self._predict_unknown(instance)
