@@ -58,7 +58,10 @@ class EnhancedPredictor(Predictor):
                                                  if label in self._model.vocab._token_to_index[namespace]
                                                  else token
                                                  for label in instance.fields[namespace].labels]
-
+        
+        replace_tokens(instance, "labels", "case")
+        replace_tokens(instance, "head_tags", "case")
+    
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
         
