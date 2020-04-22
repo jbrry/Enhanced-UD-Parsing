@@ -45,16 +45,16 @@ for tbid in $TBIDS ; do
   export NUMPY_SEED=$NUMPY_SEED
 
   # hyperparams
-  export BATCH_SIZE=8
+  export BATCH_SIZE=32
   export NUM_EPOCHS=75
   export CUDA_DEVICE=0
 
   if [ "$tbid" = "fr_sequoia" ] || [ "$tbid" = "ru_syntagrus" ]; then
     # lemmas, upos, feats
-    FEATS=luf
+    FEATS=lufb
   else
     # lemmas, upos, xpos, feats
-    FEATS=luxf
+    FEATS=luxfb
   fi
 
   # get user and model names on huggingface
