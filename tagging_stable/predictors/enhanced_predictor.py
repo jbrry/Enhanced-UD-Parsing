@@ -36,11 +36,11 @@ class EnhancedPredictor(Predictor):
 
     @overrides
     def predict_instance(self, instance: Instance) -> JsonDict:
-        if "@@UNKNOWN@@" not in self._model.vocab._token_to_index["labels"]:
+        if "@@UNKNOWN@@" not in self._model.vocab._token_to_index["enhanced_tags"]:
             # Handle cases where the labels are present in the test set but not training set
             # https://github.com/Hyperparticle/udify/blob/b6a1173e7e5fc1e4c63f4a7cf1563b469268a3b8/udify/predictors/predictor.py
             self._predict_unknown(instance)
-
+        
         outputs = self._model.forward_on_instance(instance)
         return sanitize(outputs)
 
@@ -59,8 +59,9 @@ class EnhancedPredictor(Predictor):
                                                  else token
                                                  for label in instance.fields[namespace].labels]
         
-        replace_tokens(instance, "labels", "case")
-        replace_tokens(instance, "head_tags", "case")
+
+        #replace_tokens(instance, "head_tags", "case")
+        replace_tokens(instance, "enhanced_tags", "case")
     
     @overrides
     def dump_line(self, outputs: JsonDict) -> str:
