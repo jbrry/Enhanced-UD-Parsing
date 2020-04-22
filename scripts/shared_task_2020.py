@@ -520,6 +520,7 @@ class Config_default:
         if self.options.debug:
             print('\t-->', datasets)
         retval = []
+        external_model_ids_covered = {}
         for module_name in module_names:
             if self.options.debug:
                 print('\t\tImporting', module_name)
@@ -552,7 +553,6 @@ class Config_default:
                         ]
                         if self.options.debug:
                             print('\t\t\tChecking dataset combination', combination)
-
                         contains_ud25_data = False
                         contains_task_data = False
                         _, first_tbid = combination[0].split('.', 1)
@@ -587,6 +587,23 @@ class Config_default:
                             # target lcode --> skip
                             if self.options.debug:
                                 print('\t\t\t--> no matching lcode, skipping')
+                            continue
+                        if my_module.uses_external_models():
+                            model_id = my_module.get_model_id(lcode, None, dataset, self.options)
+                            if model_id is None:
+                                if self.options.debug:
+                                    print('\t\t\t--> not adding as no matching model available')
+                            elif model_id in external_model_ids_covered:
+                                if self.options.debug:
+                                    print('\t\t\t--> not adding as already have %s with model ID %s' %(
+                                        external_model_ids_covered[model_id], model_id,
+                                    ))
+                            else:
+                                retval.append((priority, ':'.join((module_name, '+'.join(combination)))))
+                                external_model_ids_covered[model_id] = retval[-1][1]
+                                if self.options.debug:
+                                    print('\t\t\t--> added data as module has external model matching it')
+                                    print('\t\t\t--> model ID is', model_id)
                             continue
                         is_polyglot = len(data_lcodes) > 1
                         #if is_polyglot:

@@ -20,6 +20,9 @@ import sys
 import common_udpipe_future
 import utilities
 
+def uses_external_models():
+    return False
+
 def supports_lcode(lcode):
     # This parser supports any language for which the user
     # has training data.

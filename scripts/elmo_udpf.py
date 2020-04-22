@@ -40,6 +40,9 @@ except:
 import common_udpipe_future
 import fasttext_udpf
 
+def uses_external_models():
+    return False
+
 def supports_lcode(lcode):
     if not fasttext_udpf.supports_lcode(lcode):
         return False

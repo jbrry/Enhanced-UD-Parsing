@@ -17,6 +17,9 @@ import os
 import subprocess
 import sys
 
+def uses_external_models():
+    return True
+
 def supports_lcode(lcode):
     return True
 

@@ -20,6 +20,9 @@ import sys
 import common_udpipe_future
 import utilities
 
+def uses_external_models():
+    return False
+
 def supports_lcode(lcode):
     return os.path.exists('%s/fasttext-%s.npz' %(
         os.environ['FASTTEXT_NPZ_DIR'], 

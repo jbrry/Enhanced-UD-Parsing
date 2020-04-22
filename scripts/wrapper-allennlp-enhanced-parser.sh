@@ -20,6 +20,10 @@ test -z $5 && echo "Missing output conllu file"
 test -z $5 && exit 1
 OUTPUT_FILE=$5
 
+if [ -e ${OUTPUT_FILE}_woc ] ; then
+    echo "Re-using intermediate .connlu_woc file"
+else
+
 if [ -e $MODEL_DIR/model.tar.gz ]; then
     echo "Using $MODEL_DIR/model.tar.gz"
 else
@@ -42,10 +46,20 @@ allennlp predict  \
     --include-package "$PACKAGE"       \
     --use-dataset-reader               \
     --silent
+fi
   
 if [ -e ${OUTPUT_FILE}_woc ]; then
-    scripts/restore-conllu-comments-and-more.py ${INPUT_FILE} < ${OUTPUT_FILE}_woc > ${OUTPUT_FILE}
-    rm ${OUTPUT_FILE}_woc
+    if scripts/restore-conllu-comments-and-more.py ${INPUT_FILE} < ${OUTPUT_FILE}_woc > ${OUTPUT_FILE}_ra ; then
+        mv ${OUTPUT_FILE}_ra ${OUTPUT_FILE}
+    else
+        # failure
+        echo "Error: Helper script return with non-zero error code. Please inspect:"
+        echo "Parser input: ${INPUT_FILE}"
+        echo "Parser output: ${OUTPUT_FILE}_woc"
+        echo "Restored output: ${OUTPUT_FILE}_ra"
+    fi
+    # delete _woc file and, if present, _ra file
+    rm ${OUTPUT_FILE}_*
 else
     echo "Error: No output file"
 fi

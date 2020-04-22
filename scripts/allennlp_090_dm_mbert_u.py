@@ -19,6 +19,7 @@ import os
 import subprocess
 import sys
 
+import copy_parse
 import utilities
 
 def supports_lcode(lcode, tbid = None):
@@ -36,6 +37,9 @@ def has_task_model_for_tbid(tbid):
 def train_model_if_missing(lcode, init_seed, datasets, options):
     return None
 
+def uses_external_models():
+    return True
+
 def get_model_id(lcode, init_seed, dataset, options):
     return utilities.get_model_dir(
         __name__,   # current module's name
@@ -51,7 +55,9 @@ def predict(
         lcode, init_seed, datasets, options,
     )[0]
     if model_path is None:
-        raise ValueError('Request to predict with a model for which training is not supported')
+        if options.debug:
+            print('Request to predict with a model for which training is not supported')
+        return False
     if not os.path.exists(model_path):
         if options.debug:
             print('Model %s not found' %model_path)
@@ -68,10 +74,11 @@ def predict(
         raise ValueError('Allennlp version %s not implemented' %allennlp_version)
     # insert dummy enhanced dependencies expected by the parser's conllu reader
     conllu_input_copy2enh = conllu_input + '_c2e'
-    copy_parse.predict(
-        lcode, init_seed, dataset, options,
-        conllu_input, conllu_input_copy2enh
-    )
+    if not os.path.exists(conllu_input_copy2enh):
+        copy_parse.predict(
+            lcode, init_seed, datasets, options,
+            conllu_input, conllu_input_copy2enh
+        )
     # compile command to run
     command.append(model_path)
     command.append(conllu_input_copy2enh)
@@ -82,7 +89,8 @@ def predict(
     sys.stdout.flush()
     subprocess.call(command)
     # cleanup _c2e file
-    os.unlink(conllu_input_copy2enh)
+    if not options.debug:
+        os.unlink(conllu_input_copy2enh)
     # TODO: check output more carefully,
     #       e.g. check number of sentences (=number of empty lines)
     return os.path.exists(conllu_output)

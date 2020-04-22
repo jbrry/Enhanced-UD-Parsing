@@ -20,6 +20,9 @@ import sys
 import common_udpipe_future
 import utilities
 
+def uses_external_models():
+    return True
+
 def supports_lcode(lcode, tbid = None):
     model_path = get_model_path(lcode, tbid)
     if model_path:

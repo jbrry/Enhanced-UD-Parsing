@@ -22,6 +22,10 @@ def main():
         line1 = file_with_comments.readline()
         if line2 is None:
             line2 = sys.stdin.readline()
+        if line2.rstrip() == '# newpar = None' \
+        and line1.rstrip() == '# newpar':
+            # fix allennlp bug
+            line2 = line1
         if not line1:
             if line2:
                 if not have_warned_about_trailing_output:
@@ -69,7 +73,7 @@ def main():
             sys.stdout.write(line1)
             continue
         if line2.startswith('#'):
-            raise ValueError('Not supported: parser added a comment')
+            raise ValueError('Not supported: parser added a comment %s' %line2)
         if '-' in id1 and id1.split('-')[0] == id2:
             # x-y token is missing
             sys.stdout.write(line1)
