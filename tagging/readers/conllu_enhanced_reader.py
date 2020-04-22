@@ -320,6 +320,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             "feats": feats,
             "lemmas": lemmas,
             "ids": ids,
+            "misc": misc,
             "original_to_new_indices": original_to_new_indices,
             "head_tags": head_tags,
             "head_indices": head_indices,
