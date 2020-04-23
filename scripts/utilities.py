@@ -188,6 +188,9 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
         # example: [0] [1]    [2] [3] [4]  [5] [6]      [7]
         #      en_ewt-enhanced-dm-en-BERT-luxf-20200417-060431
         reject_reason = None
+        if len(fields) > 5 and fields[5] == 'ou':
+            # allow 'ou' to match with 'u'
+            fields[5] = 'u'
         if len(fields) != 8:
             reject_reason = 'wrong number of fields'
         elif not fields[0].startswith(lcode):
