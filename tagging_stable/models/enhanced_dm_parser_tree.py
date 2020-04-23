@@ -1,4 +1,4 @@
-from typing import Dict, Tuple, Any, List
+from typing import Optional, Dict, Tuple, Any, List
 import logging
 import copy
 from operator import itemgetter 
@@ -9,16 +9,15 @@ from torch.nn.modules import Dropout
 import numpy
 
 from allennlp.common.checks import check_dimensions_match, ConfigurationError
-from allennlp.data import TextFieldTensors, Vocabulary
+from allennlp.data import Vocabulary
 from allennlp.modules import Seq2SeqEncoder, TextFieldEmbedder, Embedding, InputVariationalDropout
 from allennlp.modules.matrix_attention.bilinear_matrix_attention import BilinearMatrixAttention
 from allennlp.modules import FeedForward
 from allennlp.models.model import Model
-from allennlp.nn import InitializerApplicator, Activation
-from allennlp.nn.util import min_value_of_dtype
+from allennlp.nn import InitializerApplicator, RegularizerApplicator, Activation
 from allennlp.nn.util import get_text_field_mask
 from allennlp.nn.util import get_lengths_from_binary_sequence_mask
-from tagging.training.enhanced_attachment_scores import EnhancedAttachmentScores
+from tagging_stable.training.enhanced_attachment_scores import EnhancedAttachmentScores
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -82,9 +81,8 @@ class EnhancedDMParserTree(Model):
         input_dropout: float = 0.0,
         edge_prediction_threshold: float = 0.5,
         initializer: InitializerApplicator = InitializerApplicator(),
-        **kwargs,
-    ) -> None:
-        super().__init__(vocab, **kwargs)    
+        regularizer: Optional[RegularizerApplicator] = None) -> None:
+        super(EnhancedDMParserTree, self).__init__(vocab, regularizer)    
 
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
@@ -168,7 +166,7 @@ class EnhancedDMParserTree(Model):
     @overrides
     def forward(
         self,  # type: ignore
-        tokens: TextFieldTensors,
+        tokens: torch.LongTensor,
         lemmas: torch.LongTensor = None,
         upos: torch.LongTensor = None,
         xpos: torch.LongTensor = None,
@@ -277,6 +275,7 @@ class EnhancedDMParserTree(Model):
             embedded_text_input = torch.cat(concatenated_input, -1)
 
         mask = get_text_field_mask(tokens)
+
         embedded_text_input = self._input_dropout(embedded_text_input)
         encoded_text = self.encoder(embedded_text_input, mask)
 
@@ -306,7 +305,11 @@ class EnhancedDMParserTree(Model):
         arc_tag_logits = arc_tag_logits.permute(0, 2, 3, 1).contiguous()
         
         # Since we'll be doing some additions, using the min value will cause underflow
-        minus_mask = ~mask * min_value_of_dtype(arc_scores.dtype) / 10
+        min_value = 1e-13 #-1e8
+        mask = mask.bool()
+        minus_mask = ~mask * min_value / 10
+        #minus_mask = ~mask * min_value_of_dtype(arc_scores.dtype) / 10
+        
         arc_scores = arc_scores + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
 
         arc_probs, arc_tag_probs = self._greedy_decode(arc_scores, arc_tag_logits, mask)
@@ -338,7 +341,7 @@ class EnhancedDMParserTree(Model):
             output_dict["tag_loss"] = tag_nll
                 
             # get human readable output to computed enhanced graph metrics
-            output_dict = self.make_output_human_readable(output_dict)
+            output_dict = self.decode(output_dict)
             
             # predicted arcs, arc_tags
             predicted_arcs = output_dict["arcs"]
@@ -358,7 +361,7 @@ class EnhancedDMParserTree(Model):
 
 
     @overrides
-    def make_output_human_readable(
+    def decode(
         self, output_dict: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         arc_tag_probs = output_dict["arc_tag_probs"].cpu().detach().numpy()

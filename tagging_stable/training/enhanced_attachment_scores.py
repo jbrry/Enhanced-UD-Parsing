@@ -6,8 +6,8 @@ import torch
 from allennlp.training.metrics.metric import Metric
 
 
-@Metric.register("enhanced_attachment_scores_stable")
-class EnhancedAttachmentScoresStable(Metric):
+@Metric.register("enhanced_attachment_scores")
+class EnhancedAttachmentScores(Metric):
     """
     Computes unlabeled precision, recall and f1.
     As the parser uses a sigmoid, initially it will predict numerous edges 
