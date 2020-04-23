@@ -119,8 +119,11 @@ def collect_en_case_candidates(sentence, candidates):
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'case':
-            break
+            continue
         head = row[conllu_dataset.head_column]     # head(y)
+        if head == '0':
+            # cannot append to label of root as there is no conllu row for it
+            continue
         head_row_index = sentence.id2row[head]
         head_row = sentence.rows[head_row_index]   # x
         head_label = head_row[conllu_dataset.label_column]   # label(x)
@@ -144,8 +147,11 @@ def collect_ar_case_candidates(sentence, candidates):
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'case':
-            break
+            continue
         head = row[conllu_dataset.head_column]     # head(y)
+        if head == '0':
+            # cannot append to label of root as there is no conllu row for it
+            continue
         head_row_index = sentence.id2row[head]
         head_row = sentence.rows[head_row_index]   # x
         head_label = head_row[conllu_dataset.label_column]   # label(x)
@@ -184,8 +190,11 @@ def collect_mark_candidates(sentence, candidates):
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'mark':
-            break
+            continue
         head = row[conllu_dataset.head_column]     # head(y)
+        if head == '0':
+            # cannot append to label of root as there is no conllu row for it
+            continue
         head_row_index = sentence.id2row[head]
         head_row = sentence.rows[head_row_index]   # x
         head_label = head_row[conllu_dataset.label_column]   # label(x)
@@ -209,8 +218,11 @@ def collect_cc_candidates(sentence, candidates):
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'cc':
-            break
+            continue
         head = row[conllu_dataset.head_column]     # head(y)
+        if head == '0':
+            # cannot append to label of root as there is no conllu row for it
+            continue
         head_row_index = sentence.id2row[head]
         head_row = sentence.rows[head_row_index]   # x
         head_label = head_row[conllu_dataset.label_column]   # label(x)
@@ -267,11 +279,11 @@ def apply_candidates(sentence, candidates, merge_with_existing = False):
             bucket = head2bucket[head]
             #print('copy2e: bucket', bucket)
             if len(bucket) == 1:
-                print('\tdirect write')
+                #print('\tdirect write')
                 new_arcs.append('%s:%s' %(head, bucket.pop()))
             elif not bucket:
                 # should not happen
-                print('\tworkaround')
+                #print('\tworkaround')
                 print('Warning: Missing label in bucket. Using a frequent one')
                 new_arcs.append('%s:nmod' %head)
             else:
@@ -282,7 +294,7 @@ def apply_candidates(sentence, candidates, merge_with_existing = False):
                     clabels.append((-label.count(':'), -len(label), label))
                 clabels.sort()
                 _, _, label = clabels[0]
-                print('\tpicked label', label)
+                #print('\tpicked label', label)
                 new_arcs.append('%s:%s' %(head, label))
         # write list of arcs into enhanced dependencies column
         #print('copy2e: new_arcs', new_arcs)
