@@ -14,6 +14,7 @@
 from __future__ import print_function
 
 import os
+import random
 import subprocess
 import sys
 
@@ -104,10 +105,69 @@ def apply_heuristic_rules(conllu_input_file, conllu_output_file):
     f_out.close()
 
 def collect_en_case_candidates(sentence, candidates):
-    raise NotImplementedError
+    '''
+        For each row with label "case", find its head and if the head's
+        label is not "obl:agent" append the row's lemma to the label of
+        the head's arc also attested in the basic tree.
+    '''
+    for row_index in sentence.enh_tokens2row:
+        row = sentence.rows[row_index]             # y
+        label = row[conllu_dataset.label_column]   # label(y)
+        if label != 'case':
+            break
+        head = row[conllu_dataset.head_column]     # head(y)
+        head_row_index = sentence.id2row[head]
+        head_row = sentence.rows[head_row_index]   # x
+        head_label = head_row[conllu_dataset.label_column]   # label(x)
+        if head_label == 'obl:agent':
+            continue
+        if not row_index in candidates:
+            candidates[row_index] = []
+        candidates[head_row_index].append('%s:%s:%s' %(
+            head_row[conllu_dataset.head_column],  # head(x)
+            head_label,                            # label(x)
+            row[conllu_dataset.lemma_column],      # lemma(y)
+        ))
 
 def collect_ar_case_candidates(sentence, candidates):
-    raise NotImplementedError
+    '''
+        Like en-case but no exclusion of "obl:agent" and, in addition to
+        the lemma, append lowercase version of value of case attribute
+        in morphological features.
+    '''
+    for row_index in sentence.enh_tokens2row:
+        row = sentence.rows[row_index]             # y
+        label = row[conllu_dataset.label_column]   # label(y)
+        if label != 'case':
+            break
+        head = row[conllu_dataset.head_column]     # head(y)
+        head_row_index = sentence.id2row[head]
+        head_row = sentence.rows[head_row_index]   # x
+        head_label = head_row[conllu_dataset.label_column]   # label(x)
+        #if head_label == 'obl:agent':
+        #    continue
+        morph = head_row[conllu_dataset.morph_column].lower()
+        case_value = None
+        for feature in morph.split('|'):
+            if feature.startswith('case='):
+                _, case_value = feature.split('=', 1)   # case_value(x)
+                if ',' in case_value:
+                     # must disambiguate case
+                     # TODO: use classifier
+                     print('Warning: Making random choice among case values %s' %case_value)
+                     values = case_value.split(',')
+                     case_value = random.choice(values)
+        if not case_value:
+            print('Warning: Found no case value. Using gen')
+            case_value = 'gen'
+        if not row_index in candidates:
+            candidates[row_index] = []
+        candidates[head_row_index].append('%s:%s:%s:%s' %(
+            head_row[conllu_dataset.head_column],  # head(x)
+            head_label,                            # label(x)
+            row[conllu_dataset.lemma_column],      # lemma(y)
+            case_value
+        ))
 
 def collect_mark_candidates(sentence, candidates):
     raise NotImplementedError

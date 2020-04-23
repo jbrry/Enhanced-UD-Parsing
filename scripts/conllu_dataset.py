@@ -19,9 +19,12 @@ import utilities
 
 id_column = 0
 token_column = 1
+lemma_column = 2
 pos_column = 3
+morph_column = 5
 head_column = 6
 label_column = 7
+enh_column = 7
 
 def hex2base62(h):
     s = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
