@@ -329,31 +329,55 @@ class UniversalDependenciesEnhancedDatasetReaderTree(DatasetReader):
                 token_field_with_root = ['root'] + tokens
                 fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags, label_namespace="deps")
         
-        # check if we have elided tokens
+    
         if original_to_new_indices:
-            conllu_ids = original_to_new_indices.values()
+            # 1-indexed conllu ids as they appear in the sentence, e.g. 13.1 -> 14.
+            offsets = list(original_to_new_indices.values())
+            # we start from index 1 as there is a placeholder for root (0) in the above dictionary
+            conllu_ids = offsets[1:]
+
+            # change the indices of the heads to reflect the new order
+            augmented_heads = []
+            for head in head_indices:
+                # the "_" head won't be in here
+                if head in original_to_new_indices.keys():
+                    # take the 1-indexed head based on the order of words in the sentence
+                    augmented_head = original_to_new_indices[head]
+                    augmented_heads.append(augmented_head)
+                else:
+                    augmented_heads.append("_")
+            
+            basic_heads = augmented_heads
+            
         else:
             conllu_ids = ids
+            basic_heads = head_indices
         
-        assert len(conllu_ids) == len(head_indices), "each token should have a head"
+        assert len(conllu_ids) == len(basic_heads), "each token should have a head"
         
         head_information = []
-        for dep, head in zip(conllu_ids, head_indices):
-            distance = head - dep
-            # get a qualitative distance category          
-            distance_category = self.get_distance_categories(distance)
-            # get a qualitative category of whether the head is to the left or right
-            if distance < 0:
-                # left-headed
-                direction_label = "<L>"
-            elif distance > 0:
-                # right-headed
-                direction_label = "<R>"
+        for dep, head in zip(conllu_ids, basic_heads):
+            if head != "_":
+                distance = head - dep
+                print(distance)
+                # get a qualitative distance category          
+                distance_category = self.get_distance_categories(distance)
+                # get a qualitative category of whether the head is to the left or right
+                if distance < 0:
+                    # left-headed
+                    direction_label = "<L>"
+                elif distance > 0:
+                    # right-headed
+                    direction_label = "<R>"
+            else:
+                # there is no information from the basic tree for elided tokens
+                direction_label = "<NULL_DIR>"
+                distance_category = "<NULL_DIST>"
             
             # join direction and category
             head_direction_and_distance = direction_label + "|" + distance_category
             head_information.append(head_direction_and_distance)
-                
+        
         # embed the head information like a morphological feature, e.g. it is a combination of direction and distance features        
         sublist_heads = []
         for full_head_information in head_information:
