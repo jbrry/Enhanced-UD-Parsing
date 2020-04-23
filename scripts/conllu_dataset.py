@@ -92,7 +92,7 @@ class ConlluSentence(basic_dataset.Sentence):
         # check whether this is a UD token
         token_id = fields[id_column]
         if token_id.startswith('#') \
-        or '-' in token_id \
+        or '-' in token_id:
             return
         # record enhanced UD token
         self.enh_token2row.append(r_index)
@@ -190,9 +190,13 @@ class ConlluDataset(basic_dataset.Dataset):
         sentence.write(f_out, remove_comments)
 
 
-def evaluate(prediction_path, gold_path, options, outname = None):
+def evaluate(prediction_path, gold_path, options, outname = None, reuse_nonemtpty = True):
     if not outname:
         outname = prediction_path[:-7] + '.eval.txt'
+    if reuse_nonemtpty \
+    and os.path.exists(outname) \
+    and os.path.getsize(outname) > 0:
+        return get_score_from_eval_txt(outname)
     # collapse enhanced dependencies as required by shared task eval script
     collapsed_dir = '%s/collapsed' %options.predictdir
     utilities.makedirs(collapsed_dir)
@@ -230,6 +234,9 @@ def evaluate(prediction_path, gold_path, options, outname = None):
     sys.stderr.flush()
     sys.stdout.flush()
     subprocess.call(command)
+    return get_score_from_eval_txt(outname)
+
+def get_score_from_eval_txt(outname, metric = 'ELAS'):
     score = (0.0, 'N/A')
     with open(outname, 'rb') as f:
         for line in f:
@@ -238,7 +245,7 @@ def evaluate(prediction_path, gold_path, options, outname = None):
                 continue
             # [0]       [1] [2]         [3] [4]         [5] [6]         [7] [8]
             # LAS        |  79.756753596 |  79.756753596 |  79.756753596 |  79.756753596
-            if fields[0] == 'ELAS':
+            if fields[0] == metric:
                 score = fields[6]
                 score = (float(score), score)
                 break
