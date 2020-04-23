@@ -120,13 +120,43 @@ BLEX       |     68.86 |     68.65 |     68.76 |     72.81
                 f = open('%s_%s_%s.html' %table_key, 'wb')
                 f.write('<html><head><title>%s %s %s</title></head>\n' %table_key)
                 f.write('<body>\n')
+                # navigation
+                f.write('treebanks: ')
+                for nav_tbid in sorted(list(tbids)):
+                    if nav_tbid != tbid:
+                        f.write(' - <a href="%s_%s_%s.html">' %(nav_tbid, metric, part))
+                    f.write(nav_tbid)
+                    if nav_tbid != tbid:
+                        f.write('</a> - ')
+                f.write('</br>\n')
+                f.write('metrics: ')
+                for nav_metric in sorted(list(metrics)):
+                    if nav_metric != metric:
+                        f.write(' - <a href="%s_%s_%s.html">' %(tbid, nav_metric, part))
+                    f.write(nav_metric)
+                    if nav_metric != metric:
+                        f.write('</a> - \n')
+                f.write('</br>\n')
+                f.write('parts: ')
+                for nav_part in sorted(list(parts)):
+                    if nav_part != part:
+                        f.write(' - <a href="%s_%s_%s.html">' %(tbid, metric, nav_part))
+                    f.write(nav_part)
+                    if nav_part != part:
+                        f.write('</a> - \n')
+                f.write('</br>\n')
+                # content
                 f.write('<h1>%s %s %s</h1>\n' %table_key)
-                f.write('<table>\n')
-                f.write('<th><td>Segmenter</td><td>Basic Parser</td><td>Enhancer</td><td>Score</td></th>\n')
+                f.write('<table border="1" cellpadding="4">\n')
+                f.write('<tr><th>Segmenter</th><th>Basic Parser</th><th>Enhancer</th><th>Score</th></tr>\n')
                 table.sort()
                 for _, score_as_string, system in table:
-                    values = system + (score_as_string,)
-                    f.write('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' %values)
+                    f.write('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' %(
+                        system[0].replace('_', ' '),
+                        system[1].replace('_', ' ').replace('+', ' + '),
+                        system[2].replace('_', ' '),
+                        score_as_string
+                    ))
                 f.write('</table>\n')
                 f.write('</body>\n')
                 f.write('</html>\n')
