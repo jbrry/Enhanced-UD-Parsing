@@ -125,6 +125,7 @@ local model_name = std.extVar("MODEL_NAME");
       "patience": patience,
       "cuda_device": std.parseInt(std.extVar("CUDA_DEVICE")),
       "validation_metric": "+labeled_f1",
+      //"num_gradient_accumulation_steps": std.parseInt(std.extVar("GRAD_ACCUM_BATCH_SIZE")),
       "optimizer": {
         "type": "dense_sparse_adam",
         "betas": [0.9, 0.9]
