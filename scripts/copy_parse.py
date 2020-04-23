@@ -120,8 +120,8 @@ def collect_en_case_candidates(sentence, candidates):
         head_label = head_row[conllu_dataset.label_column]   # label(x)
         if head_label == 'obl:agent':
             continue
-        if not row_index in candidates:
-            candidates[row_index] = []
+        if not head_row_index in candidates:
+            candidates[head_row_index] = []
         candidates[head_row_index].append('%s:%s:%s' %(
             head_row[conllu_dataset.head_column],  # head(x)
             head_label,                            # label(x)
@@ -159,8 +159,8 @@ def collect_ar_case_candidates(sentence, candidates):
         if not case_value:
             print('Warning: Found no case value. Using gen')
             case_value = 'gen'
-        if not row_index in candidates:
-            candidates[row_index] = []
+        if not head_row_index in candidates:
+            candidates[head_row_index] = []
         candidates[head_row_index].append('%s:%s:%s:%s' %(
             head_row[conllu_dataset.head_column],  # head(x)
             head_label,                            # label(x)
@@ -185,8 +185,8 @@ def collect_mark_candidates(sentence, candidates):
         head_label = head_row[conllu_dataset.label_column]   # label(x)
         if head_label not in ('acl', 'advcl'):
             continue
-        if not row_index in candidates:
-            candidates[row_index] = []
+        if not head_row_index in candidates:
+            candidates[head_row_index] = []
         candidates[head_row_index].append('%s:%s:%s' %(
             head_row[conllu_dataset.head_column],  # head(x)
             head_label,                            # label(x)
@@ -208,8 +208,8 @@ def collect_cc_candidates(sentence, candidates):
         head_row_index = sentence.id2row[head]
         head_row = sentence.rows[head_row_index]   # x
         head_label = head_row[conllu_dataset.label_column]   # label(x)
-        if not row_index in candidates:
-            candidates[row_index] = []
+        if not head_row_index in candidates:
+            candidates[head_row_index] = []
         candidates[head_row_index].append('%s:%s:%s' %(
             head_row[conllu_dataset.head_column],  # head(x)
             head_label,                            # label(x)

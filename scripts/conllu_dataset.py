@@ -45,6 +45,7 @@ class ConlluSentence(basic_dataset.Sentence):
         self.rows = []
         self.token2row = []
         self.enh_token2row = []
+        self.id2row = {}
 
     def __getitem__(self, index):
         return self.rows[self.token2row[index]]
@@ -91,6 +92,8 @@ class ConlluSentence(basic_dataset.Sentence):
             self.sent_id = line[eqpos+1:].strip()
         # check whether this is a UD token
         token_id = fields[id_column]
+        if not token_id.startswith('#'):
+            self.id2row[token_id] = r_index
         if token_id.startswith('#') \
         or '-' in token_id:
             return
@@ -102,7 +105,7 @@ class ConlluSentence(basic_dataset.Sentence):
         self.token2row.append(r_index)
 
     def write(self, f_out, remove_comments = False):
-        for row in sentence.rows:
+        for row in self.rows:
             if remove_comments and row[0].startswith('#'):
                 continue
             # incomplete sentences should be completed by the caller,
