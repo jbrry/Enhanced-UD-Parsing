@@ -474,7 +474,13 @@ class Config_default:
 
     def get_enhanced_parser_names(self):
         retval = []
-        retval.append('copy_parse')
+        for case_rule in ('', '_encase', '_arcase'):
+            for mark_rule in ('', '_mark'):
+                for cc_rule in ('', '_cc'):
+                    for rel_rule in ('', '_rel'):
+                        retval.append('copy_parse%s%s%s%s' %(
+                            case_rule, mark_rule, cc_rule, rel_rule
+                        ))
         for allennlp_version in '090 dev'.split():
             for ptype in 'dm kg'.split():
                 for bert in 'mbert lbert pbert'.split():
