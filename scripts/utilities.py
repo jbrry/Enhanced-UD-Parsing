@@ -188,6 +188,9 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
         # example: [0] [1]    [2] [3] [4]  [5] [6]      [7]
         #      en_ewt-enhanced-dm-en-BERT-luxf-20200417-060431
         reject_reason = None
+        if len(fields) > 5 and fields[5] == 'ou':
+            # allow 'ou' to match with 'u'
+            fields[5] = 'u'
         if len(fields) != 8:
             reject_reason = 'wrong number of fields'
         elif not fields[0].startswith(lcode):
@@ -232,7 +235,10 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
                     model_id = '%s_%s_%s_%s' %(module_name, model_tbid, fields[6], fields[7])
                     break
             model_age = now - os.path.getmtime(model_file)
-            candidates.append((priority, model_age, candidate_model_dir, model_id))
+            nscore = -float(get_allennlp_score(
+                candidate_model_dir, 'best_validation_labeled_f1',
+            ))
+            candidates.append((priority, nscore, model_age, candidate_model_dir, model_id))
             if options.debug:
                 print('\t%s\t-->\tOK (%s)' %(candidate_model, details))
         elif options.debug:
@@ -240,8 +246,33 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
     if not candidates:
         return None, None
     candidates.sort()
-    _, _, model_dir, model_id = candidates[0]
+    _, _, _, model_dir, model_id = candidates[0]
     return model_dir, model_id
+
+def get_allennlp_score(model_dir, field_name):
+    filename = '/'.join((model_dir, 'metrics.json'))
+    if not os.path.exists(filename):
+        return '0'
+    f = open(filename, 'rb')
+    retval = '0'
+    example_lines = """
+      "best_validation_labeled_recall": 0.7955599838091976,
+      "best_validation_precision": 0.9169247150421143,
+    """
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        for c in ':",':
+            line = line.replace(c, ' ')
+        fields = line.split()
+        # [0]                         [1]
+        # best_validation_labeled_f1  0.8055297214647141
+        if len(fields) == 2 and fields[0] == field_name:
+            retval = fields[1]
+            break
+    f.close()
+    return retval
 
 def get_udpf_model_dir(module_name, lcode, init_seed, datasets, options):
     udpf_modeldir = '/'.join((options.modeldir, 'udpf'))

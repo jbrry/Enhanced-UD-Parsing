@@ -94,6 +94,27 @@ class ConlluSentence(basic_dataset.Sentence):
         # record UD token
         self.token2row.append(r_index)
 
+    def write(self, f_out, remove_comments = False):
+        for row in sentence.rows:
+            if remove_comments and row[0].startswith('#'):
+                continue
+            # incomplete sentences should be completed by the caller,
+            # e.g. save_to_file(), see basic_dataset.SentenceCompleter
+            if '@@MISSING@@' in row:
+                for column, cell in enumerate(row):
+                    if column:
+                        f_out.write('\t')
+                    if column < 2:
+                        f_out.write(cell)
+                    elif cell == '@@MISSING@@':
+                        f_out.write('_')
+                    else:
+                        f_out.write(cell)
+            else:
+                f_out.write('\t'.join(row))
+            f_out.write('\n')
+        f_out.write('\n')
+
     def clone(self):
         copy = ConlluSentence()
         for row in self.rows:
@@ -159,25 +180,8 @@ class ConlluDataset(basic_dataset.Dataset):
         return sentence
 
     def write_sentence(self, f_out, sentence, remove_comments = False):
-        for row in sentence.rows:
-            if remove_comments and row[0].startswith('#'):
-                continue
-            # incomplete sentences should be completed by the caller,
-            # e.g. save_to_file(), see basic_dataset.SentenceCompleter
-            if '@@MISSING@@' in row:
-                for column, cell in enumerate(row):
-                    if column:
-                        f_out.write('\t')
-                    if column < 2:
-                        f_out.write(cell)
-                    elif cell == '@@MISSING@@':
-                        f_out.write('_')
-                    else:
-                        f_out.write(cell)
-            else:
-                f_out.write('\t'.join(row))
-            f_out.write('\n')
-        f_out.write('\n')
+        sentence.write(f_out, remove_comments)
+
 
 def evaluate(prediction_path, gold_path, options, outname = None):
     if not outname:
