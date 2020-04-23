@@ -52,15 +52,15 @@ for tbid in $TBIDS ; do
   export NUM_EPOCHS=75
   export CUDA_DEVICE=0
  
-  #if [ "$tbid" = "fr_sequoia" ] || [ "$tbid" = "ru_syntagrus" ]; then
+  if [ "$tbid" = "fr_sequoia" ] || [ "$tbid" = "ru_syntagrus" ]; then
     # lemmas, upos, feats
-  #  FEATS=luf
-  #else
+    FEATS=lufb
+  else
     # lemmas, upos, xpos, feats
-  #  FEATS=luxf
-  #fi
+    FEATS=luxfb
+  fi
   
-  FEATS=u
+  #FEATS=u
   CONFIG=configs/stable/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}.jsonnet
 
   if [ "$tbid" = "et_ewt" ]; then
