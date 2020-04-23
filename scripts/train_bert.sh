@@ -21,7 +21,7 @@ test -z $5 && exit 1
 RANDOM_SEED=$5
 
 # official shared-task data
-TB_DIR=data/train-dev
+TB_DIR=data/train-dev-filtered
 
 TIMESTAMP=`date "+%Y%m%d-%H%M%S"` 
 
@@ -45,7 +45,7 @@ for tbid in $TBIDS ; do
   export NUMPY_SEED=$NUMPY_SEED
 
   # hyperparams
-  export BATCH_SIZE=32
+  export BATCH_SIZE=16
   export NUM_EPOCHS=75
   export CUDA_DEVICE=0
 
@@ -54,7 +54,7 @@ for tbid in $TBIDS ; do
     FEATS=lufb
   else
     # lemmas, upos, xpos, feats
-    FEATS=luxfb
+    FEATS=luxf
   fi
 
   # get user and model names on huggingface
@@ -94,7 +94,7 @@ for tbid in $TBIDS ; do
     # AutoTokenizer model name
     export MODEL_NAME=${model_path}
   
-    allennlp train configs/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-${BERT_MODEL}-BERT-${FEATS}-${TIMESTAMP} --include-package tagging
+    allennlp train configs/ud_${TASK}_bert_${MODEL_TYPE}_${FEATS}.jsonnet -s logs_stable/${tbid}-${TASK}-${MODEL_TYPE}-${BERT_MODEL}-BERT-${FEATS}-${TIMESTAMP} --include-package tagging_stable
   done
 done
 
