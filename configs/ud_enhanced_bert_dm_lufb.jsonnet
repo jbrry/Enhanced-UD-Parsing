@@ -1,7 +1,7 @@
 local bert_embedding_dim = 768;
 local char_embedding_dim = 64;
 local tag_embedding_dim = 50;
-local tag_combined_dim = 300;
+local tag_combined_dim = 250;
 local embedding_dim = bert_embedding_dim + tag_combined_dim + char_embedding_dim + char_embedding_dim;
 local hidden_dim = 600;
 local num_epochs = 75;
@@ -90,7 +90,7 @@ local model_name = std.extVar("MODEL_NAME");
         "use_highway": true
       },
       "arc_representation_dim": 500,
-      "tag_representation_dim": 200,
+      "tag_representation_dim": 100,
       "dropout": 0.33,
       "input_dropout": 0.33,
       "initializer": {

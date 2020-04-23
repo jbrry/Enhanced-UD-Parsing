@@ -95,7 +95,7 @@ local model_name = std.extVar("MODEL_NAME");
         "use_highway": true
       },
       "arc_representation_dim": 500,
-      "tag_representation_dim": 200,
+      "tag_representation_dim": 100,
       "dropout": 0.33,
       "input_dropout": 0.33,
       "initializer": {
