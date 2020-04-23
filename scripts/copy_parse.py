@@ -56,10 +56,10 @@ def predict(lcode, init_seed, dataset, options, conllu_input_file, conllu_output
     # TODO: we assume here the input is in our temp folder but
     #       for general use we should make sure to use our temp
     #       folder even when the input comes from somewhere else
-    conllu_input_copy2enh = conllu_input + '_c2e'
+    conllu_input_copy2enh = conllu_input_file + '_c2e'
     if not os.path.exists(conllu_input_copy2enh):
         copy_basic_to_enhanced(
-            conllu_input, conllu_input_copy2enh
+            conllu_input_file, conllu_input_copy2enh
         )
     # now read this file sentence-by-sentence
     apply_heuristic_rules(conllu_input_copy2enh, conllu_output_file)
@@ -68,12 +68,11 @@ def predict(lcode, init_seed, dataset, options, conllu_input_file, conllu_output
         os.unlink(conllu_input_copy2enh)
     # TODO: check output more carefully,
     #       e.g. check number of sentences (=number of empty lines)
-    return os.path.exists(conllu_output)
+    return os.path.exists(conllu_output_file)
 
 def apply_heuristic_rules(conllu_input_file, conllu_output_file):
     f_in = open(conllu_input_file, 'rb')
     f_out = open(conllu_output_file, 'wb')
-    raise NotImplementedError
     while True:
         line = f_in.readline()
         if not line:
@@ -96,7 +95,7 @@ def apply_heuristic_rules(conllu_input_file, conllu_output_file):
             collect_mark_candidates(sentence, candidates)
         if '_cc' in __name__:
             collect_cc_candidates(sentence, candidates)
-        apply_candidate(sentence, candidates)
+        apply_candidates(sentence, candidates)
         if '_rel' in __name__:
             apply_rel_rule(sentence)
         # write result
@@ -110,7 +109,7 @@ def collect_en_case_candidates(sentence, candidates):
         label is not "obl:agent" append the row's lemma to the label of
         the head's arc also attested in the basic tree.
     '''
-    for row_index in sentence.enh_tokens2row:
+    for row_index in sentence.enh_token2row:
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'case':
@@ -135,7 +134,7 @@ def collect_ar_case_candidates(sentence, candidates):
         the lemma, append lowercase version of value of case attribute
         in morphological features.
     '''
-    for row_index in sentence.enh_tokens2row:
+    for row_index in sentence.enh_token2row:
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'case':
@@ -175,7 +174,7 @@ def collect_mark_candidates(sentence, candidates):
         label is "acl" or "advcl" append the row's lemma to the label
         of the head's arc also attested in the basic tree.
     '''
-    for row_index in sentence.enh_tokens2row:
+    for row_index in sentence.enh_token2row:
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'mark':
@@ -200,7 +199,7 @@ def collect_cc_candidates(sentence, candidates):
         lemma to the label of the head's arc also attested in the basic
         tree.
     '''
-    for row_index in sentence.enh_tokens2row:
+    for row_index in sentence.enh_token2row:
         row = sentence.rows[row_index]             # y
         label = row[conllu_dataset.label_column]   # label(y)
         if label != 'cc':
