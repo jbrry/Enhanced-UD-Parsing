@@ -17,6 +17,8 @@ import os
 import subprocess
 import sys
 
+import conllu_dataset
+
 def uses_external_models():
     return True
 
@@ -70,10 +72,54 @@ def predict(lcode, init_seed, dataset, options, conllu_input_file, conllu_output
 def apply_heuristic_rules(conllu_input_file, conllu_output_file):
     f_in = open(conllu_input_file, 'rb')
     f_out = open(conllu_output_file, 'wb')
-    # TODO
     raise NotImplementedError
+    while True:
+        line = f_in.readline()
+        if not line:
+            break
+        sentence = conllu_dataset.ConlluSentence()
+        sentence.append(line)
+        while True:
+            line = f_in.readline()
+            if line.isspace():
+                # empty line --> end of sentence
+                break
+            sentence.append(line)
+        # sentence is ready
+        candidates = {}  # head --> list of new canidate labels
+        if '_encase' in __name__:
+            collect_en_case_candidates(sentence, candidates)
+        if '_arcase' in __name__:
+            collect_ar_case_candidates(sentence, candidates)
+        if '_mark' in __name__:
+            collect_mark_candidates(sentence, candidates)
+        if '_cc' in __name__:
+            collect_cc_candidates(sentence, candidates)
+        apply_candidate(sentence, candidates)
+        if '_rel' in __name__:
+            apply_rel_rule(sentence)
+        # write result
+        sentence.write(f_out)
     f_in.close()
     f_out.close()
+
+def collect_en_case_candidates(sentence, candidates):
+    raise NotImplementedError
+
+def collect_ar_case_candidates(sentence, candidates):
+    raise NotImplementedError
+
+def collect_mark_candidates(sentence, candidates):
+    raise NotImplementedError
+
+def collect_cc_candidates(sentence, candidates):
+    raise NotImplementedError
+
+def apply_candidates(sentence, candidates):
+    raise NotImplementedError
+
+def apply_rel_rule(sentence):
+    raise NotImplementedError
 
 def copy_basic_to_enhanced(conllu_input_file, conllu_output_file):
     f_in = open(conllu_input_file, 'rb')
