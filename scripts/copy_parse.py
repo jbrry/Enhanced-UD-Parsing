@@ -170,13 +170,109 @@ def collect_ar_case_candidates(sentence, candidates):
         ))
 
 def collect_mark_candidates(sentence, candidates):
-    raise NotImplementedError
+    '''
+        For each row with label "mark", find its head and if the head's
+        label is "acl" or "advcl" append the row's lemma to the label
+        of the head's arc also attested in the basic tree.
+    '''
+    for row_index in sentence.enh_tokens2row:
+        row = sentence.rows[row_index]             # y
+        label = row[conllu_dataset.label_column]   # label(y)
+        if label != 'mark':
+            break
+        head = row[conllu_dataset.head_column]     # head(y)
+        head_row_index = sentence.id2row[head]
+        head_row = sentence.rows[head_row_index]   # x
+        head_label = head_row[conllu_dataset.label_column]   # label(x)
+        if head_label not in ('acl', 'advcl'):
+            continue
+        if not row_index in candidates:
+            candidates[row_index] = []
+        candidates[head_row_index].append('%s:%s:%s' %(
+            head_row[conllu_dataset.head_column],  # head(x)
+            head_label,                            # label(x)
+            row[conllu_dataset.lemma_column],      # lemma(y)
+        ))
 
 def collect_cc_candidates(sentence, candidates):
-    raise NotImplementedError
+    '''
+        For each row with label "cc", find its head and append the row's
+        lemma to the label of the head's arc also attested in the basic
+        tree.
+    '''
+    for row_index in sentence.enh_tokens2row:
+        row = sentence.rows[row_index]             # y
+        label = row[conllu_dataset.label_column]   # label(y)
+        if label != 'cc':
+            break
+        head = row[conllu_dataset.head_column]     # head(y)
+        head_row_index = sentence.id2row[head]
+        head_row = sentence.rows[head_row_index]   # x
+        head_label = head_row[conllu_dataset.label_column]   # label(x)
+        if not row_index in candidates:
+            candidates[row_index] = []
+        candidates[head_row_index].append('%s:%s:%s' %(
+            head_row[conllu_dataset.head_column],  # head(x)
+            head_label,                            # label(x)
+            row[conllu_dataset.lemma_column],      # lemma(y)
+        ))
 
-def apply_candidates(sentence, candidates):
-    raise NotImplementedError
+def apply_candidates(sentence, candidates, ignore_existing = True):
+    for row_index in candidates:
+        row = sentence.rows[row_index]
+        enh_dep_rel_set = candidates[row_index]
+        if not ignore_existing:
+            # include existing relations in set to be merged
+            enh = row[conllu_dataset.enh_column]
+            for enh_dep_rel in enh.split('|'):
+                enh_dep_rel_set.append(enh_dep_rel)
+        # allocate separate buckets for each head
+        head2bucket = {}
+        for enh_dep_rel in enh_dep_rel_set:
+            head, labels = enh_dep_rel.split(':', 1)
+            if not head in head2bucket:
+                head2bucket[head] = set()
+            # delete any prefix of this label
+            to_be_deleted = []
+            for label_in_bucket in head2bucket[head]:
+                if label.startwith(label_in_bucket)  \
+                and label != label_in_bucket:
+                    to_be_deleted.append(label_in_bucket)
+            for label_in_bucket in to_be_deleted:
+                head2bucket[head].remove(label_in_bucket)
+            # add this label
+            head2bucket[head].add(labels)
+        # sort by float(head)
+        heads_float_and_key = []
+        for head in head2bucket:
+            try:
+                fl_head = float(head)
+            except:
+                print('Warning: Cannot interpret head %r as float' %head)
+                fl_head = 9999.9
+            heads_float_and_key.append((fl_head, head))
+        heads_float_and_key.sort()
+        # assemble new list of arcs
+        new_arcs = []
+        for _, head in heads_float_and_key:
+            bucket = head2bucket[head]
+            if len(bucket) == 1:
+                new_arcs.append('%s:%s' %(head, bucket.pop()))
+            elif not bucket:
+                # should not happen
+                print('Warning: Missing label in bucket. Using a frequent one')
+                new_arcs.append('%s:nmod' %head)
+            else:
+                # pick the longest candidate label
+                # TODO: use a classifier to decide
+                clabels = []
+                for label in bucket:
+                    clabels.append((-label.count(':'), -len(label), label))
+                clabels.sort()
+                _, _, label = clabels[0]
+                new_arcs.append('%s:%s' %(head, label))
+        # write list of arcs into enhanced dependencies column
+        row[conllu_dataset.enh_column] = '|'.join(new_arcs)
 
 def apply_rel_rule(sentence):
     raise NotImplementedError
