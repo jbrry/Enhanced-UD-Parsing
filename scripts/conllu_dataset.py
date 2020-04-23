@@ -41,6 +41,7 @@ class ConlluSentence(basic_dataset.Sentence):
         basic_dataset.Sentence.__init__(self)
         self.rows = []
         self.token2row = []
+        self.enh_token2row = []
 
     def __getitem__(self, index):
         return self.rows[self.token2row[index]]
@@ -89,7 +90,10 @@ class ConlluSentence(basic_dataset.Sentence):
         token_id = fields[id_column]
         if token_id.startswith('#') \
         or '-' in token_id \
-        or '.' in token_id:
+            return
+        # record enhanced UD token
+        self.enh_token2row.append(r_index)
+        if '.' in token_id:
             return
         # record UD token
         self.token2row.append(r_index)
