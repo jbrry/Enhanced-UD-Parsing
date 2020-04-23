@@ -73,10 +73,12 @@ def predict(
     else:
         raise ValueError('Allennlp version %s not implemented' %allennlp_version)
     # insert dummy enhanced dependencies expected by the parser's conllu reader
+    # TODO: we assume here the input is in our temp folder but
+    #       for general use we should make sure to use our temp
+    #       folder even when the input comes from somewhere else
     conllu_input_copy2enh = conllu_input + '_c2e'
     if not os.path.exists(conllu_input_copy2enh):
-        copy_parse.predict(
-            lcode, init_seed, datasets, options,
+        copy_parse.copy_basic_to_enhanced(
             conllu_input, conllu_input_copy2enh
         )
     # compile command to run
