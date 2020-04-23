@@ -51,6 +51,9 @@ def main():
     data = {}
     for filename in os.listdir(opt_eval_dir):
         if filename.endswith('-ud-dev.eval.txt'):
+            full_path = '/'.join((opt_eval_dir, filename))
+            if os.path.getsize(full_path) == 0:
+                continue
             fields = filename.split('-')
             if len(fields) != 7:
                 raise ValueError('wrong number of fields in %s: %r' %(filename, fields))
@@ -60,7 +63,7 @@ def main():
             system = (segmenter, basic_parser, enhancer)
             assert fields[3] == 'for'
             tbid = fields[4]
-            f = open('/'.join((opt_eval_dir, filename)), 'rb')
+            f = open(full_path, 'rb')
             example_contents = """
 Metric     | Precision |    Recall |  F1 Score | AligndAcc
 -----------+-----------+-----------+-----------+-----------
