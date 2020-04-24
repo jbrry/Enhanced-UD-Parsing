@@ -474,9 +474,16 @@ class Config_default:
                 if restrict_to_one and len(combination) > 1:
                     continue
                 for enhanced_parser in self.get_enhanced_parsers():
-                    for ensemble_size in (3,5,7):
+                    for ensemble_size in self.get_ensemble_sizes():
                         if len(combination) <= ensemble_size:
+                            if not self.allow_variant(
+                                segmenter, combination, enhanced_parser, ensemble_size
+                            ):
+                                continue
                             yield (segmenter, combination, enhanced_parser, ensemble_size)
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        return True
 
     def get_segmenter_names(self):
         return ['udpipe_standard', 'udpipe_augmented', 'udpipe_polyglot', 'uusegmenter']
@@ -504,6 +511,9 @@ class Config_default:
                             feats,
                         ))
         return retval
+
+    def get_ensemble_sizes(self):
+        return (3,5,7)
 
     def get_basic_parser_ensemble_size(self):
         return self.variant[3]
@@ -917,7 +927,48 @@ class Config_with_more_datasets(Config_default):
                 yield 'ud25.' + tbid
                 tbids_covered.add(tbid)
 
+    def get_additional_dataset_tbids(self):
+        return []
+
+class Config_ar(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 2 \
+        and 'elmo' in basic_parsers[0] \
+        and 'fasttext' in basic_parsers[1] \
+        and basic_parsers[0].count('+') in (0,1):
+            return True
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0,1):
+            return True
+        return False
+
+class Config_bg(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0,1):
+            return True
+        return False
+
 class Config_cs(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0,3):
+            if self.tbid == 'cs_cac' and not 'cac' in basic_parsers[0]:
+                return False
+            if self.tbid == 'cs_fictree' and not 'fictree' in basic_parsers[0]:
+                return False
+            return True
+        return False
 
     def get_additional_dataset_tbids(self):
         return [
@@ -928,6 +979,15 @@ class Config_cs(Config_with_more_datasets):
 
 class Config_en(Config_with_more_datasets):
 
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and 'ewt' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0,3):
+            return True
+        return False
+
     def get_additional_dataset_tbids(self):
         return [
             ('en_ewt', False),
@@ -936,7 +996,39 @@ class Config_en(Config_with_more_datasets):
             ('en_partut', False),
         ]
 
+class Config_fi(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 2 \
+        and 'elmo' in basic_parsers[0] \
+        and 'fasttext' in basic_parsers[1] \
+        and basic_parsers[0].count('+') in (0,1) \
+        and basic_parsers[1].count('+') in (0,1):
+            return True
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0,1):
+            return True
+        return False
+
 class Config_fr(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and 'sequoia' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 3:
+            return True
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and 'sequoia' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 0:
+            return True
+        return False
 
     def get_additional_dataset_tbids(self):
         return [
@@ -948,6 +1040,21 @@ class Config_fr(Config_with_more_datasets):
 
 class Config_it(Config_with_more_datasets):
 
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and 'isdt' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 4:
+            return True
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and 'isdt' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 0:
+            return True
+        return False
+
     def get_additional_dataset_tbids(self):
         return [
             ('it_isdt', False),
@@ -957,7 +1064,81 @@ class Config_it(Config_with_more_datasets):
             ('it_vit', False),
         ]
 
+class Config_lt(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 1 \
+        and basic_parsers[0].count('+') in (0,1):
+            return True
+        return False
+
+class Config_lv(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 2 \
+        and 'elmo' in basic_parsers[0] \
+        and 'fasttext' in basic_parsers[1] \
+        and basic_parsers[0].count('+') in (0,1) \
+        and basic_parsers[1].count('+') in (0,1):
+            return True
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0,1):
+            return True
+        return False
+
+class Config_nl(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'nl_alpino' and not 'alpino' in basic_parsers[0]:
+            return False
+        if self.tbid == 'nl_lassysmall' and not 'lassysmall' in basic_parsers[0]:
+            return False
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 1:
+            return True
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 0:
+            return True
+        return False
+
+class Config_pl(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'pl_lfg' and not 'lfg' in basic_parsers[0]:
+            return False
+        if self.tbid == 'pl_pdb' and not 'pdb' in basic_parsers[0]:
+            return False
+        if ensemble_size in (5, 7)  \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0, 1):
+            return True
+        if ensemble_size == 3  \
+        and len(basic_parsers) == 1 \
+        and 'fasttext' in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 1:
+            return True
+        return False
+
 class Config_ru(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'ru_syntagrus' and not 'syntagrus' in basic_parsers[0]:
+            return False
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0, 2):
+            return True
+        return False
 
     def get_additional_dataset_tbids(self):
         return [
@@ -965,6 +1146,61 @@ class Config_ru(Config_with_more_datasets):
             ('ru_gsd', False),
             ('ru_taiga', False),
         ]
+
+class Config_sk(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'sk_snk' and not 'snk' in basic_parsers[0]:
+            return False
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 2 \
+        and 'elmo' in basic_parsers[0] \
+        and 'plain' in basic_parsers[1] \
+        and basic_parsers[0].count('+') in (0, 1) \
+        and basic_parsers[1].count('+') in (0, 1):
+            return True
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0, 1):
+            return True
+        return False
+
+class Config_sv(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'sv_talbanken' and not 'talbanken' in basic_parsers[0]:
+            return False
+        if ensemble_size in (5, 7) \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0, 1):
+            return True
+        return False
+
+class Config_ta(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'ta_ttb' and not 'ttb' in basic_parsers[0]:
+            return False
+        if ensemble_size == 5 \
+        and len(basic_parsers) == 1 \
+        and 'plain' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0, 1):
+            return True
+        return False
+
+class Config_uk(Config_with_more_datasets):
+
+    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if self.tbid == 'uk_iu' and not 'iu' in basic_parsers[0]:
+            return False
+        if ensemble_size in (3, 7) \
+        and len(basic_parsers) == 1 \
+        and 'elmo' in basic_parsers[0] \
+        and basic_parsers[0].count('+') in (0, 1):
+            return True
+        return False
 
 def main():
     options = Options()
