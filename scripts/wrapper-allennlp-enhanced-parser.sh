@@ -38,9 +38,11 @@ source ${PRJ_DIR}/Enhanced-UD-Parsing/venv/allennlp-${ALLENNLP_VERSION}/bin/acti
 echo "sourced ${PRJ_DIR}/Enhanced-UD-Parsing/venv/allennlp-${ALLENNLP_VERSION}/bin/activate"
 echo "using package $PACKAGE"
 
+
 allennlp predict  \
     ${MODEL_DIR}/model.tar.gz        \
     ${INPUT_FILE}                      \
+    --cuda-device 0                   \
     --output-file ${OUTPUT_FILE}_woc  \
     --predictor enhanced-predictor     \
     --include-package "$PACKAGE"       \
