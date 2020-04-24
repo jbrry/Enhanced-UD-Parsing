@@ -198,7 +198,8 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 xpos_tags = get_field("xpostag")
                 feats = get_field("feats", lambda x: "|".join(k + "=" + v for k, v in x.items())
                                      if hasattr(x, "items") else "_")
-                misc = get_field("misc", lambda x: "".join(k + "=" + v for k, v in x.items())
+                
+                misc = get_field("misc", lambda x: "|".join(k + "=" + v if v is not None else "" for k, v in x.items())
                                     if hasattr(x, "items") else "_")
                                 
                 heads = get_field("head")
