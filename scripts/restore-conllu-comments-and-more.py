@@ -45,13 +45,27 @@ def main():
             and fields2[9] != fields1[9]:
                 # MISC columns do not match
                 # --> calculate union and output in sorted order
-                misc_elemets = set()
+                key2values = {}
+                labels = set()
                 for misc in (fields1[9], fields2[9]):
                     for element in misc.rstrip().split('|'):
                         if element != '_':
-                            misc_elemets.add(element)
+                            if '=' in element:
+                                 key, values = element.split('=', 1)
+                                 if not key in key2values:
+                                     key2values[key] = []  # not using set to maintain input order
+                                 for value in values.split(','):
+                                     if value and value not in key2values[key]:
+                                         key2values[key].append(value)
+                            else:
+                                labels.add(element)
+                misc_elements = []
+                for key in sorted(list(key2values.keys())):
+                    misc_elements.append('%s=%s' %(key, ','.join(key2values[key])))
+                for label in sorted(list(labels)):
+                    misc_elements.append(label)
                 if misc_elemets:
-                    fields2[9] = '|'.join(sorted(list(misc_elemets)))
+                    fields2[9] = '|'.join(misc_elemets)
                 else:
                     fields2[9] = '_'    
                 if len(fields2) == 10:
