@@ -359,7 +359,6 @@ class UniversalDependenciesEnhancedDatasetReaderTree(DatasetReader):
         for dep, head in zip(conllu_ids, basic_heads):
             if head != "_":
                 distance = head - dep
-                print(distance)
                 # get a qualitative distance category          
                 distance_category = self.get_distance_categories(distance)
                 # get a qualitative category of whether the head is to the left or right
