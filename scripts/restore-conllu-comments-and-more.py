@@ -64,8 +64,8 @@ def main():
                     misc_elements.append('%s=%s' %(key, ','.join(key2values[key])))
                 for label in sorted(list(labels)):
                     misc_elements.append(label)
-                if misc_elemets:
-                    fields2[9] = '|'.join(misc_elemets)
+                if misc_elements:
+                    fields2[9] = '|'.join(misc_elements)
                 else:
                     fields2[9] = '_'    
                 if len(fields2) == 10:
