@@ -496,7 +496,7 @@ class Config_default:
         for allennlp_version in '090 dev'.split():
             for ptype in 'dm kg'.split():
                 for bert in 'mbert lbert pbert'.split():
-                    for feats in 'u lux luxf luxfb'.split():
+                    for feats in 'u luf lufb lux luxf luxfb'.split():
                         retval.append('allennlp_%s_%s_%s_%s' %(
                             allennlp_version,
                             ptype,
@@ -530,7 +530,7 @@ class Config_default:
             length_limit = 999,
         )
 
-    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 5):
+    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 6):
         if self.options.debug:
             print('\tQuerying datasets for', self.tbid)
             sys.stdout.flush()
