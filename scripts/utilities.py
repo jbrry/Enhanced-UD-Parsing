@@ -184,7 +184,8 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
             allennlp_modeldir, module_name, lcode, datasets
         ))
     for candidate_model in sorted(os.listdir(allennlp_modeldir)):
-        fields = candidate_model.split('-')
+        normalised_model_name = candidate_model.replace('-bg-cs-pl-ru-', '-bg_cs_pl_ru-')
+        fields = normalised_model_name.split('-')
         # example: [0] [1]    [2] [3] [4]  [5] [6]      [7]
         #      en_ewt-enhanced-dm-en-BERT-luxf-20200417-060431
         reject_reason = None
@@ -252,7 +253,17 @@ def get_allennlp_model_dir(module_name, lcode, init_seed, datasets, options):
 def get_allennlp_score(model_dir, field_name):
     filename = '/'.join((model_dir, 'metrics.json'))
     if not os.path.exists(filename):
-        return '0'
+        candidates = []
+        for candidate in os.listdir(model_dir):
+            # metrics_epoch_1.json
+            if candidate.startswith('metrics_epoch_') \
+            and candidate.endswith('.json'):
+                epoch = int(candidate.replace('.', '_').split('_')[2])
+                candidates.append((-epoch, candidate))
+        if not candidates:
+            return '0'
+        _, best_candidate = candidates[0]
+        filename = '/'.join((model_dir, best_candidate))
     f = open(filename, 'rb')
     retval = '0'
     example_lines = """
