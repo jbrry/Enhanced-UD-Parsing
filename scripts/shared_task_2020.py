@@ -406,6 +406,8 @@ Options:
                         return
                     # evaluate: gold file is assumed to be in the same folder
                     # as the input text file with .conllu instead of .txt
+                    if prediction_dataset_type == 'test':
+                        continue
                     gold_path = '%s/%s.conllu' %(tb_dir, prediction_name)
                     conllu_dataset.evaluate(enhanced_path, gold_path, self)
 
@@ -959,6 +961,8 @@ class Config_bg(Config_with_more_datasets):
 class Config_cs(Config_with_more_datasets):
 
     def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if 'allennlp' in enhanced_parser:
+            return False
         if ensemble_size == 5 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
@@ -1132,6 +1136,8 @@ class Config_ru(Config_with_more_datasets):
 
     def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if self.tbid == 'ru_syntagrus' and not 'syntagrus' in basic_parsers[0]:
+            return False
+        if 'allennlp' in enhanced_parser:
             return False
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
