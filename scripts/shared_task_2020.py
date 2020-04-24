@@ -102,6 +102,10 @@ Options:
 
     --verbose               More detailed log output
 
+    --stopfile  FILE        Stop processing if FILE exists, tested after
+                            every enhanced prediction
+                            (default: stop.me in the current folder)
+
 """)
 
     def read_options(self):
@@ -117,6 +121,7 @@ Options:
         self.init_seed  = 42
         self.verbose    = False
         self.debug      = True
+        self.stopfile   = 'stop.me'
         while len(sys.argv) >= 2 and sys.argv[1][:1] == '-':
             option = sys.argv[1]
             option = option.replace('_', '-')
@@ -152,6 +157,9 @@ Options:
                 del sys.argv[1]
             elif option == '--training-only':
                 self.training_only = True
+            elif option == '--stopfile':
+                self.stopfile = sys.argv[1]
+                del sys.argv[1]
             elif option == '--verbose':
                 self.verbose = True
             elif option == '--debug':
@@ -297,6 +305,8 @@ Options:
         self.in_progress = set()
         for tbid in sorted(list(self.configs.keys())):
             for config in self.configs[tbid]:
+                if os.path.exists(self.stopfile):
+                    return
                 if not config.is_operational():
                     print('Not training %r as it is not operational' %config)
                     continue
@@ -392,6 +402,8 @@ Options:
                         continue
                     # TODO: add post-processor here
                     # --
+                    if os.path.exists(self.stopfile):
+                        return
                     # evaluate: gold file is assumed to be in the same folder
                     # as the input text file with .conllu instead of .txt
                     gold_path = '%s/%s.conllu' %(tb_dir, prediction_name)
@@ -514,10 +526,11 @@ class Config_default:
         if self.options.debug:
             print('Enhanced parsers for', self.tbid)
         return self.filter_by_lcode_and_add_datasets(
-            self.get_enhanced_parser_names()
+            self.get_enhanced_parser_names(),
+            length_limit = 999,
         )
 
-    def filter_by_lcode_and_add_datasets(self, module_names):
+    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 5):
         if self.options.debug:
             print('\tQuerying datasets for', self.tbid)
             sys.stdout.flush()
@@ -656,9 +669,9 @@ class Config_default:
             elif self.options.debug:
                 print('\t\tLanguage %s is not supported' %self.lcode)
         retval.sort()
-        if len(retval) > 5:
+        if len(retval) > length_limit:
             print('\tPruning too long list of modules', retval)
-            retval = retval[:5]
+            retval = retval[:length_limit]
         # remove priority
         retval = map(lambda x: x[1], retval)
         if self.options.debug:
