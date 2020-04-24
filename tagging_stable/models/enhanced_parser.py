@@ -18,7 +18,7 @@ from allennlp.nn import InitializerApplicator, RegularizerApplicator, Activation
 from allennlp.nn.util import get_text_field_mask
 from allennlp.nn.util import get_lengths_from_binary_sequence_mask
 from allennlp.training.metrics import F1Measure
-from tagging_stable.training.enhanced_attachment_scores import EnhancedAttachmentScoresStable
+from tagging_stable.training.enhanced_attachment_scores import EnhancedAttachmentScores
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -127,7 +127,7 @@ class EnhancedParser(Model):
         
         # the unlabelled_f1 is confirmed the same from both classes
         self._unlabelled_f1 = F1Measure(positive_label=1)
-        self._enhanced_attachment_scores = EnhancedAttachmentScoresStable()
+        self._enhanced_attachment_scores = EnhancedAttachmentScores()
         
         self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction='none')
         self._tag_loss = torch.nn.CrossEntropyLoss(reduction='none')
