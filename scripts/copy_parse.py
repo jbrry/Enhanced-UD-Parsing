@@ -245,6 +245,9 @@ def apply_candidates(sentence, candidates, merge_with_existing = False):
             for enh_dep_rel in enh.split('|'):
                 enh_dep_rel_set.append(enh_dep_rel)
         #print('copy2e: enh_dep_rel_set', enh_dep_rel_set)
+        row[conllu_dataset.enh_column] = merge_enhanced(enh_dep_rel_set)
+
+def merge_enhanced(enh_dep_rel_set):
         # allocate separate buckets for each head
         head2bucket = {}
         for enh_dep_rel in enh_dep_rel_set:
@@ -298,10 +301,45 @@ def apply_candidates(sentence, candidates, merge_with_existing = False):
                 new_arcs.append('%s:%s' %(head, label))
         # write list of arcs into enhanced dependencies column
         #print('copy2e: new_arcs', new_arcs)
-        row[conllu_dataset.enh_column] = '|'.join(new_arcs)
+        return '|'.join(new_arcs)
 
 def apply_rel_rule(sentence):
-    raise NotImplementedError
+    '''
+        For each row with PronType=Rel in morphological features, find
+        its head and if the head's arc is labelled "acl:relcl" set the
+        row's label to "ref", change the row's head to its head's head
+        (only in the enhanced graph, the basic tree stays untouched)
+        and append a copy of the current row's arc (before it was
+        changed) to the head's head.
+    '''
+    for row_index in sentence.enh_token2row:
+        row = sentence.rows[row_index]             # x
+        morph = row[conllu_dataset.morph_column]   # morph(x)
+        if 'PronType=Rel' not in morph  \
+        or 'PronType=Rel' not in morph.split('|'):
+            continue
+        head = row[conllu_dataset.head_column]     # head(x)
+        if head == '0':
+            # cannot visit root as there is no conllu row for it
+            continue
+        head_row_index = sentence.id2row[head]
+        head_row = sentence.rows[head_row_index]   # z
+        head_label = head_row[conllu_dataset.label_column]   # label(z)
+        # find grandparent
+        gp = head_row[conllu_dataset.head_column]  # head(z)
+        if gp == '0':
+            # cannot annotate root as there is no conllu row for it
+            continue
+        gp_row_index = sentence.id2row[gp]
+        gp_row = sentence.rows[gp_row_index]       # y
+        # set enhanced(x) := y:ref
+        row[conllu_dataset.enh_column] = '%s:ref' %gp
+        # set enhanced(y) += head(x):label(x)
+        label = row[conllu_dataset.label_column]     # label(x)
+        gp_row[conllu_dataset.enh_column] = merge_enhanced([
+            gp_row[conllu_dataset.enh_column],
+            ':'.join((head, label)),
+        ])
 
 def copy_basic_to_enhanced(conllu_input_file, conllu_output_file):
     f_in = open(conllu_input_file, 'rb')
