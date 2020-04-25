@@ -17,7 +17,7 @@ for file in $(ls $TMP_DIR); do
     echo "using $LCODE"
 
     # adjust path to tools if necessary
-    perl ${HOME}/tools/conllu-quick-fix.pl < $TMP_DIR/$file > $FIXED_DIR/$file.conllu
+    perl ${HOME}/tools/conllu-quick-fix.pl < $TMP_DIR/$file > $FIXED_DIR/$LCODE.conllu
 
 done 
 
