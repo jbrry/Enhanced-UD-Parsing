@@ -2,27 +2,36 @@
 
 # usage: ./scripts/fix_all_final.sh tmp/final_tmp/ tmp/final_fixed/
 
+
 # directory where you have copied the test files to
-TMP_DIR=$1
+FINAL_DIR=$1
+
+# temp dir
+TMP_DIR=$2
 
 # where to write fixed output
-FIXED_DIR=$2
+FIXED_DIR=$3
 
-echo "searching ${TMP_DIR}"
+echo "searching ${FINAL_DIR}"
 
-for file in $(ls $TMP_DIR); do 
+for file in $(ls $FINAL_DIR); do 
     echo "found $file"
 
-    rm x.conllu
-    cut -f -10 $TMP_DIR/$file > x.conllu
+    echo "copying $file to $TMP_DIR"
+    cp $FINAL_DIR/$file $TMP_DIR/
 
-    cp x.conllu $TMP_DIR/$file 
+    rm $TMP_DIR/tmp.conllu
+    
+    cut -f -10 $TMP_DIR/$file > $TMP_DIR/tmp.conllu
+    rm $TMP_DIR/$file
+    
+    cp $TMP_DIR/tmp.conllu $TMP_DIR/$file 
     
     LCODE=$(echo ${file} | awk -F "_" '{print $2}')
     echo "using $LCODE"
 
     # adjust path to tools if necessary
-    perl ${HOME}/tools/conllu-quick-fix.pl < $TMP_DIR/$file > $FIXED_DIR/$LCODE.conllu
+    perl ${HOME}/tools/conllu-quick-fix.pl --connect-to-root < $TMP_DIR/$file > $FIXED_DIR/$LCODE.conllu
 
 done 
 
