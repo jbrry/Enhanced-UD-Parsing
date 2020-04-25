@@ -12,6 +12,11 @@ echo "searching ${TMP_DIR}"
 
 for file in $(ls $TMP_DIR); do 
     echo "found $file"
+
+    rm x.conllu
+    cut -f -10 $TMP_DIR/$file > x.conllu
+
+    cp x.conllu $TMP_DIR/$file 
     
     LCODE=$(echo ${file} | awk -F "_" '{print $2}')
     echo "using $LCODE"
