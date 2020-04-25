@@ -124,7 +124,7 @@ class EnhancedPredictor(Predictor):
                 row = f"{id_}\t{form}" + "".join(["\t_"] * 8)
                 output_lines.append(row)
 
-            row = "\t".join(line) + "".join(["\t_"] * 1)
+            row = "\t".join(line)
             output_lines.append(row)
 
         output_lines = conllu_metadata + output_lines
