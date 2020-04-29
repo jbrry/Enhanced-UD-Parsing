@@ -1039,7 +1039,7 @@ class Config_en(Config_with_more_datasets):
         and 'elmo' in basic_parsers[1] \
         and 'en_ewt' in basic_parsers[0] \
         and 'en_ewt' in basic_parsers[1] \
-        and basic_parsers[0].count('+') == 3:
+        and basic_parsers[0].count('+') == 3 \
         and basic_parsers[1].count('+') == 0 \
         and self.tbid in basic_parsers[1]:
             return True
