@@ -157,10 +157,10 @@ def collect_ar_case_candidates(sentence, candidates):
         head_label = head_row[conllu_dataset.label_column]   # label(x)
         #if head_label == 'obl:agent':
         #    continue
-        morph = head_row[conllu_dataset.morph_column].lower()
+        morph = head_row[conllu_dataset.morph_column].lower()  # morph(x)
         case_value = None
         for feature in morph.split('|'):
-            if feature.startswith('case='):
+            if feature.startswith('case='):  # coverted to lowercase above
                 _, case_value = feature.split('=', 1)   # case_value(x)
                 if ',' in case_value:
                      # must disambiguate case
@@ -169,16 +169,21 @@ def collect_ar_case_candidates(sentence, candidates):
                      values = case_value.split(',')
                      case_value = random.choice(values)
         if not case_value:
-            print('Warning: Found no case value. Using gen')
-            case_value = 'gen'
+            enh_label = '%s:%s:%s' %(
+                head_row[conllu_dataset.head_column],  # head(x)
+                head_label,                            # label(x)
+                row[conllu_dataset.lemma_column],      # lemma(y)
+            )
+        else:
+            enh_label = '%s:%s:%s:%s' %(
+                head_row[conllu_dataset.head_column],  # head(x)
+                head_label,                            # label(x)
+                row[conllu_dataset.lemma_column],      # lemma(y)
+                case_value
+            )
         if not head_row_index in candidates:
             candidates[head_row_index] = []
-        candidates[head_row_index].append('%s:%s:%s:%s' %(
-            head_row[conllu_dataset.head_column],  # head(x)
-            head_label,                            # label(x)
-            row[conllu_dataset.lemma_column],      # lemma(y)
-            case_value
-        ))
+        candidates[head_row_index].append(enh_label)
 
 def collect_mark_candidates(sentence, candidates):
     '''
