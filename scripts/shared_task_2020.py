@@ -49,6 +49,23 @@ Options:
                             data set.
                             (Default: only report development set results)
 
+    --all-heuristics        Allow configurations that use any of the
+                            available copy-to-enhanced heuristics.
+                            (Default: restrict configurations to those
+                            combinations of heuristics that are configured
+                            in this script)
+
+    --best-basic            Only use configurations that use a best basic
+                            parser as specified in the language-specifig
+                            configurations in this script.
+                            (Default: try all basic parser combinations)
+
+    --use-allennlp          Allow configurations that use the allennlp
+                            semantic parser for enhanced parsing.
+                            (Default: only try the copy-to-enhanced
+                            heuristic as a first step to find out which
+                            basic parsers are best)
+
     --skip-training  NAME   Skip training models for component NAME.
                             Can be one of segmenter, basic_parser and
                             enhanced_parser, and can be repeated to skip
@@ -60,6 +77,9 @@ Options:
                             Skipping can be restricted to a subcompontent
                             with a dot, e.g. "basic_parser.plain_udpf".
                             (Default: train all missing models)
+
+    --final-run             Short-hand for --final-test --all-heuristics
+                            --best-basic --use-allennlp --skip-training ALL
 
     --training-only         Quit after training tasks have been submitted.
                             (Default: Wait for tasks to finish and continue
@@ -112,6 +132,9 @@ Options:
         self.final_test = False
         self.modules_not_to_train = set()
         self.training_only = False
+        self.all_heuristics = False
+        self.best_basic     = False
+        self.use_allennlp   = False
         self.workdir    = None
         self.taskdir    = None
         self.ud25dir    = None
@@ -157,6 +180,19 @@ Options:
                 del sys.argv[1]
             elif option == '--training-only':
                 self.training_only = True
+            elif option in ('--best-basic', '--restrict-to-best-basic-parsers'):
+                self.best_basic = True
+            elif option in ('--all-heuristics', '--do-not-restrict-heuristics'):
+                self.all_heuristics = True
+            elif option in ('--use-allennlp', '--do-not-exclude-allennlp'):
+                self.use_allennlp = True
+            elif option == '--final-run':
+                sys.argv.append('--final-test')
+                sys.argv.append('--all-heuristics')
+                sys.argv.append('--best-basic')
+                sys.argv.append('--use-allennlp')
+                sys.argv.append('--skip-training')
+                sys.argv.append('ALL')
             elif option == '--stopfile':
                 self.stopfile = sys.argv[1]
                 del sys.argv[1]
@@ -453,7 +489,8 @@ class Config_default:
             # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
             n_basic_parsers = len(basic_parsers)
             restrict_to_one = False
-            if n_basic_parsers > 4:
+            restrict_to_two = False
+            if n_basic_parsers > 20:
                 # TODO: prune list of parser to k-best parsers according to dev results
                 found_dev_results = False
                 if found_dev_results:
@@ -467,24 +504,30 @@ class Config_default:
                     for i in range(n_basic_parsers):
                         combination_indices.append(1<<i)
             else:
+                if n_basic_parsers > 3:
+                    restrict_to_two = True
                 combination_indices = range(1, 1 << n_basic_parsers)
             for combination_index in combination_indices:
                 combination = [basic_parsers[j]
                     for j in range(n_basic_parsers)
                     if (combination_index & (1 << j))
                 ]
-                if restrict_to_one and len(combination) > 1:
+                combination_size = len(combination)
+                if restrict_to_one and combination_size > 1:
+                    continue
+                if restrict_to_two and combination_size > 2:
                     continue
                 for enhanced_parser in self.get_enhanced_parsers():
                     for ensemble_size in self.get_ensemble_sizes():
-                        if len(combination) <= ensemble_size:
-                            if not self.allow_variant(
+                        if combination_size <= ensemble_size:
+                            if self.options.best_basic \
+                            and not self.uses_best_basic_parser(
                                 segmenter, combination, enhanced_parser, ensemble_size
                             ):
                                 continue
                             yield (segmenter, combination, enhanced_parser, ensemble_size)
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         return True
 
     def get_segmenter_names(self):
@@ -494,19 +537,28 @@ class Config_default:
         return ['elmo_udpf', 'udify', 'fasttext_udpf', 'plain_udpf',]
 
     def get_enhanced_parser_names(self):
-        retval = []
+        retval = set()
         for case_rule in ('', '_encase', '_arcase'):
             for mark_rule in ('', '_mark'):
                 for cc_rule in ('', '_cc'):
                     for rel_rule in ('', '_rel'):
-                        retval.append('copy_parse%s%s%s%s' %(
+                        retval.add('copy_parse%s%s%s%s' %(
                             case_rule, mark_rule, cc_rule, rel_rule
                         ))
+        if not self.options.all_heuristics:
+            retval = set()
+            retval.add('copy_parse_arcase_mark')
+            retval.add('copy_parse_arcase_mark_rel')
+            retval.add('copy_parse_encase_mark_rel')
+            retval.add('copy_parse_encase_mark_cc_rel')
+            retval.add('copy_parse_encase_rel')
+        if not self.options.use_allennlp:
+            return retval
         for allennlp_version in '090 dev'.split():
             for ptype in 'dm kg'.split():
                 for bert in 'mbert lbert pbert'.split():
                     for feats in 'u luf lufb lux luxf luxfb'.split():
-                        retval.append('allennlp_%s_%s_%s_%s' %(
+                        retval.add('allennlp_%s_%s_%s_%s' %(
                             allennlp_version,
                             ptype,
                             bert,
@@ -542,7 +594,7 @@ class Config_default:
             length_limit = 999,
         )
 
-    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 6):
+    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 18):
         if self.options.debug:
             print('\tQuerying datasets for', self.tbid)
             sys.stdout.flush()
@@ -902,6 +954,7 @@ class Config_default:
                     patience_left -= 1
                     if self.options.debug:
                         print('Parse failed.')
+                p_index += 1
         if self.options.debug:
             print('%d of %d basic parses are ready' %(len(ensemble_predictions), n_parses))
         if len(ensemble_predictions) < n_parses:
@@ -934,43 +987,39 @@ class Config_with_more_datasets(Config_default):
 
 class Config_ar(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if ensemble_size == 5 \
-        and len(basic_parsers) == 2 \
-        and 'elmo' in basic_parsers[0] \
-        and 'fasttext' in basic_parsers[1] \
-        and basic_parsers[0].count('+') in (0,1):
-            return True
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
-        and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0,1):
+        and 'elmo' in basic_parsers[0]:
             return True
         return False
 
 class Config_bg(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
-        and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0,1):
+        and 'elmo' in basic_parsers[0]:
             return True
         return False
 
 class Config_cs(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if 'allennlp' in enhanced_parser:
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if not self.tbid in basic_parsers[0]:
             return False
-        if ensemble_size == 5 \
+        if ensemble_size in (3,7) \
+        and len(basic_parsers) == 2 \
+        and 'elmo' in basic_parsers[0] \
+        and 'elmo' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 0 \
+        and basic_parsers[1].count('+') == 2 \
+        and self.tbid in basic_parsers[1]:
+            return True
+        if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0,3):
-            if self.tbid == 'cs_cac' and not 'cac' in basic_parsers[0]:
-                return False
-            if self.tbid == 'cs_fictree' and not 'fictree' in basic_parsers[0]:
-                return False
+        and basic_parsers[0].count('+') == 2:
             return True
         return False
 
@@ -983,12 +1032,16 @@ class Config_cs(Config_with_more_datasets):
 
 class Config_en(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
-        and len(basic_parsers) == 1 \
+        and len(basic_parsers) == 2 \
         and 'elmo' in basic_parsers[0] \
-        and 'ewt' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0,3):
+        and 'elmo' in basic_parsers[1] \
+        and 'en_ewt' in basic_parsers[0] \
+        and 'en_ewt' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 3:
+        and basic_parsers[1].count('+') == 0 \
+        and self.tbid in basic_parsers[1]:
             return True
         return False
 
@@ -1000,37 +1053,36 @@ class Config_en(Config_with_more_datasets):
             ('en_partut', False),
         ]
 
-class Config_fi(Config_with_more_datasets):
+class Config_et(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if ensemble_size == 5 \
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 7 \
         and len(basic_parsers) == 2 \
         and 'elmo' in basic_parsers[0] \
-        and 'fasttext' in basic_parsers[1] \
-        and basic_parsers[0].count('+') in (0,1) \
-        and basic_parsers[1].count('+') in (0,1):
+        and 'elmo' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 1 \
+        and basic_parsers[1].count('+') == 0:
             return True
+        return False
+
+class Config_fi(Config_with_more_datasets):
+
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0,1):
+        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
 class Config_fr(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if ensemble_size == 5 \
-        and len(basic_parsers) == 1 \
-        and 'elmo' in basic_parsers[0] \
-        and 'sequoia' in basic_parsers[0] \
-        and basic_parsers[0].count('+') == 3:
-            return True
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
-        and 'sequoia' in basic_parsers[0] \
-        and basic_parsers[0].count('+') == 0:
+        and self.tbid in basic_parsers[0] \
+        and basic_parsers[0].count('+') == 3:
             return True
         return False
 
@@ -1044,18 +1096,24 @@ class Config_fr(Config_with_more_datasets):
 
 class Config_it(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if ensemble_size == 5 \
-        and len(basic_parsers) == 1 \
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 2 \
         and 'elmo' in basic_parsers[0] \
-        and 'isdt' in basic_parsers[0] \
-        and basic_parsers[0].count('+') == 4:
+        and 'elmo' in basic_parsers[1] \
+        and self.tbid in basic_parsers[1] \
+        and 'it_isdt' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 4 \
+        and basic_parsers[1].count('+') == 0:
             return True
         if ensemble_size == 7 \
-        and len(basic_parsers) == 1 \
+        and len(basic_parsers) == 2 \
         and 'elmo' in basic_parsers[0] \
-        and 'isdt' in basic_parsers[0] \
-        and basic_parsers[0].count('+') == 0:
+        and 'fasttext' in basic_parsers[1] \
+        and self.tbid in basic_parsers[0] \
+        and self.tbid in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 4 \
+        and basic_parsers[1].count('+') == 4:
             return True
         return False
 
@@ -1070,79 +1128,69 @@ class Config_it(Config_with_more_datasets):
 
 class Config_lt(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 5 \
         and len(basic_parsers) == 1 \
-        and basic_parsers[0].count('+') in (0,1):
+        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
 class Config_lv(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 5 \
         and len(basic_parsers) == 2 \
         and 'elmo' in basic_parsers[0] \
-        and 'fasttext' in basic_parsers[1] \
-        and basic_parsers[0].count('+') in (0,1) \
-        and basic_parsers[1].count('+') in (0,1):
+        and 'fasttext' in basic_parsers[1]:
             return True
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
-        and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0,1):
+        and 'elmo' in basic_parsers[0]:
             return True
         return False
 
 class Config_nl(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'nl_alpino' and not 'alpino' in basic_parsers[0]:
-            return False
-        if self.tbid == 'nl_lassysmall' and not 'lassysmall' in basic_parsers[0]:
-            return False
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
         and basic_parsers[0].count('+') == 1:
-            return True
-        if ensemble_size == 5 \
-        and len(basic_parsers) == 1 \
-        and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
 class Config_pl(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'pl_lfg' and not 'lfg' in basic_parsers[0]:
-            return False
-        if self.tbid == 'pl_pdb' and not 'pdb' in basic_parsers[0]:
-            return False
-        if ensemble_size in (5, 7)  \
-        and len(basic_parsers) == 1 \
-        and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0, 1):
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 2 \
+        and 'plain' in basic_parsers[0] \
+        and 'elmo' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 1 \
+        and basic_parsers[1].count('+') == 0 \
+        and self.tbid in basic_parsers[1]:
             return True
-        if ensemble_size == 3  \
-        and len(basic_parsers) == 1 \
-        and 'fasttext' in basic_parsers[0] \
-        and basic_parsers[0].count('+') == 1:
+        if ensemble_size == 7 \
+        and len(basic_parsers) == 2 \
+        and 'elmo' in basic_parsers[0] \
+        and 'elmo' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 1 \
+        and basic_parsers[1].count('+') == 0 \
+        and self.tbid in basic_parsers[1]:
             return True
         return False
 
 class Config_ru(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'ru_syntagrus' and not 'syntagrus' in basic_parsers[0]:
-            return False
-        if 'allennlp' in enhanced_parser:
-            return False
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
-        and len(basic_parsers) == 1 \
+        and len(basic_parsers) == 2 \
         and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0, 2):
+        and 'elmo' in basic_parsers[1] \
+        and basic_parsers[0].count('+') == 2 \
+        and basic_parsers[1].count('+') == 0 \
+        and self.tbid in basic_parsers[0] \
+        and self.tbid in basic_parsers[1]:
             return True
         return False
 
@@ -1155,56 +1203,41 @@ class Config_ru(Config_with_more_datasets):
 
 class Config_sk(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'sk_snk' and not 'snk' in basic_parsers[0]:
-            return False
-        if ensemble_size == 5 \
-        and len(basic_parsers) == 2 \
-        and 'elmo' in basic_parsers[0] \
-        and 'plain' in basic_parsers[1] \
-        and basic_parsers[0].count('+') in (0, 1) \
-        and basic_parsers[1].count('+') in (0, 1):
-            return True
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0, 1):
+        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
 class Config_sv(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'sv_talbanken' and not 'talbanken' in basic_parsers[0]:
-            return False
-        if ensemble_size in (5, 7) \
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size  == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0, 1):
+        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
 class Config_ta(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'ta_ttb' and not 'ttb' in basic_parsers[0]:
-            return False
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         if ensemble_size == 5 \
         and len(basic_parsers) == 1 \
         and 'plain' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0, 1):
+        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
 class Config_uk(Config_with_more_datasets):
 
-    def allow_variant(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
-        if self.tbid == 'uk_iu' and not 'iu' in basic_parsers[0]:
-            return False
-        if ensemble_size in (3, 7) \
+    def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
+        if ensemble_size == 7 \
         and len(basic_parsers) == 1 \
         and 'elmo' in basic_parsers[0] \
-        and basic_parsers[0].count('+') in (0, 1):
+        and basic_parsers[0].count('+') == 0:
             return True
         return False
 
