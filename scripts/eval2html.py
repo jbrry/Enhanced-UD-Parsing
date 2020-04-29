@@ -16,6 +16,7 @@ from __future__ import print_function
 import os
 import subprocess
 import sys
+import time
 
 def print_usage():
     print('Usage: %s [--evaldir] FOLDER' %sys.argv[0])
@@ -63,6 +64,7 @@ def main():
             system = (segmenter, basic_parser, enhancer)
             assert fields[3] == 'for'
             tbid = fields[4]
+            ptime = os.path.getmtime(full_path[:-9]+'.conllu')
             f = open(full_path, 'rb')
             example_contents = """
 Metric     | Precision |    Recall |  F1 Score | AligndAcc
@@ -109,10 +111,12 @@ BLEX       |     68.86 |     68.65 |     68.76 |     72.81
                     if not table_key in data:
                         data[table_key] = []
                     negscore = -float(score_as_str)
-                    data[table_key].append((negscore, score_as_str, system))
+                    data[table_key].append((negscore, score_as_str, system, ptime))
             f.close()
     # all data ready
     for tbid in tbids:
+        if tbid == 'et_ewt':   # exclude as we added fake dev data
+            continue
         for metric in metrics:
             for part in parts:
                 table_key = (tbid, metric, part)
@@ -126,6 +130,8 @@ BLEX       |     68.86 |     68.65 |     68.76 |     72.81
                 # navigation
                 f.write('treebanks: ')
                 for nav_tbid in sorted(list(tbids)):
+                    if nav_tbid == 'et_ewt':
+                        continue
                     if nav_tbid != tbid:
                         f.write(' - <a href="%s_%s_%s.html">' %(nav_tbid, metric, part))
                     f.write(nav_tbid)
@@ -151,14 +157,15 @@ BLEX       |     68.86 |     68.65 |     68.76 |     72.81
                 # content
                 f.write('<h1>%s %s %s</h1>\n' %table_key)
                 f.write('<table border="1" cellpadding="4">\n')
-                f.write('<tr><th>Segmenter</th><th>Basic Parser</th><th>Enhancer</th><th>Score</th></tr>\n')
+                f.write('<tr><th>Segmenter</th><th>Basic Parser</th><th>Enhancer</th><th>Score</th><th>Predicted</th></tr>\n')
                 table.sort()
-                for _, score_as_string, system in table:
-                    f.write('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' %(
+                for _, score_as_string, system, ptime in table:
+                    f.write('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' %(
                         system[0].replace('_', ' '),
                         system[1].replace('_', ' ').replace('+', ' + '),
                         system[2].replace('_', ' '),
-                        score_as_string
+                        score_as_string,
+                        time.ctime(ptime),
                     ))
                 f.write('</table>\n')
                 f.write('</body>\n')
