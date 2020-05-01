@@ -11,7 +11,7 @@ FIELDS = ["id", "form", "lemma", "upos", "xpos", "feats", "head", "deprel", "dep
 parser = argparse.ArgumentParser(description='File utils')
 parser.add_argument('--input', '-i', type=str, help='Input CoNLLU file.')
 parser.add_argument('--outdir','-o', type=str, help='Directory to write out files to.')
-#parser.add_argument('--mode', '-m', type=str, default='utf-8', help='The behaviour to connect to fragments.' Not Implemented)
+parser.add_argument('--mode', '-m', type=str, default='utf-8', help='The behaviour to connect to fragments: <root_edge>, <best_guess>.')
 parser.add_argument('--encoding', '-e', type=str, default='utf-8', help='Type of encoding.')
 args = parser.parse_args()
 
@@ -235,11 +235,22 @@ def _read(file_path):
             
             # NAIVE SOLUTION: add 0:root to the head of the pruned tree.
             root_edge = "0:root"
+            
             for i in range(len(annotated_sentence)):
                 conllu_id = annotated_sentence[i]["id"]
                 if conllu_id in pruned_tree.keys():
+                    # if we want to make a best guess, we can take the basic parse's edge,
+                    # but it has to connect to the main graph...
+                    if args.mode == "best_guess":
+                        best_guess_head = annotated_sentence[i]["head"]
+                        best_guess_label = annotated_sentence[i]["deprel"]
+                        best_guess = best_guess_head + ":" + best_guess_label
+                        edge = best_guess
+                    else:
+                        edge = root_edge
+                    
                     deps_object = annotated_sentence[i]["deps"]
-                    altered_deps_object = deps_object + "|" + root_edge
+                    altered_deps_object = deps_object + "|" + edge
                     annotated_sentence[i]["deps"] = altered_deps_object
 
             conllu_annotations.append(annotated_sentence)
