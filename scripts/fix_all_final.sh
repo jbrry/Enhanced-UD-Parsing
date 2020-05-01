@@ -34,10 +34,10 @@ for file in $(ls $FINAL_DIR); do
     CONNECTED_DIR=$TMP_DIR/connected
     python scripts/connect_graph.py -i $TMP_DIR/$file -o $CONNECTED_DIR
 
-    # apply quick-fix
+    # apply quick-fix for metadata etc.
     perl ${HOME}/tools/conllu-quick-fix.pl < $CONNECTED_DIR/$file > $FIXED_DIR/$LCODE.conllu
 
-    # validate the file
+    # validate the file at level 2
     cat $FIXED_DIR/$LCODE.conllu | python ${HOME}/tools/validate.py --level 2 --lang $LCODE
 
 done 
