@@ -1,14 +1,23 @@
+import argparse
+import os
 from typing import Dict, List, Tuple
 import logging
 import codecs
 
 logger = logging.getLogger(__name__)
 
-file_path="fr_sequoia_pred.conllu"
-
 FIELDS = ["id", "form", "lemma", "upos", "xpos", "feats", "head", "deprel", "deps", "misc"]
-ids_to_ignore = ["-"]
-heads_to_ignore = ["_"]
+
+parser = argparse.ArgumentParser(description='File utils')
+parser.add_argument('--input', '-i', type=str, help='Input CoNLLU file.')
+parser.add_argument('--outdir','-o', type=str, help='Directory to write out files to.')
+#parser.add_argument('--mode', '-m', type=str, default='utf-8', help='The behaviour to connect to fragments.' Not Implemented)
+parser.add_argument('--encoding', '-e', type=str, default='utf-8', help='Type of encoding.')
+args = parser.parse_args()
+
+if not os.path.exists(args.outdir):
+    logger.info(f"creating outdir in {args.outdir}, files will be written here.")
+    os.mkdir(args.outdir)
 
 def traverse_root_children(
     ids_to_heads, 
@@ -39,7 +48,7 @@ def traverse_root_children(
 
 def parse_sentence(sentence_blob):    
     annotated_sentence = []
-
+    # we don't track comment lines at the moment, but they are completed by conllu-quick-fix.pl
     lines = [
         line.split("\t")
         for line in sentence_blob.split("\n")
@@ -169,8 +178,7 @@ def _read(file_path):
             
             print("unreachable nodes", unreachable_nodes)
             
-            # for the unreachable nodes, we should try build fragments so we can add
-            # an edge to the head of the fragment.
+            # for the unreachable nodes we build fragments 
                        
             # 4) find common parents of unreachable tokens          
             unreachable_head_fragments = {}
@@ -178,9 +186,8 @@ def _read(file_path):
             for unreachable_node in unreachable_nodes:
                 unreachable_heads = ids_to_heads[unreachable_node]
                 for unreachable_head in unreachable_heads:
-                    if unreachable_head not in heads_to_ignore:
-                        # set the head of the unreachable nodes as the key and append its children as values
-                        unreachable_head_fragments[unreachable_head] = []
+                    # set the head of the unreachable nodes as the key and append its children as values
+                    unreachable_head_fragments[unreachable_head] = []
             
             for unreachable_node in unreachable_nodes:
                 unreachable_heads = ids_to_heads[unreachable_node]
@@ -194,19 +201,47 @@ def _read(file_path):
                 
             print("unreachable head fragments", unreachable_head_fragments)
             
-            # NAIVE SOLUTION: add 0:root to the head of each unreachable fragment
-            # n fragments, n labels
+            # 5) See if any of the parents of fragmented trees are children
+            # in other fragmented trees. If so, remove the sub-fragmented tree
+            # as you can connect everything in the sub-fragmented tree for free
+            # when you attach to the main fragmented tree.
+            
+            pruned_tree = {}
+            
+            heads_of_fragments = list(unreachable_head_fragments.keys())
+            print("heads of fragments", heads_of_fragments)
+            
+            for i, head_of_fragment in enumerate(heads_of_fragments):
+                for parent, children in unreachable_head_fragments.items():
+                    # check if head of fragment is a child in another tree
+                    if head_of_fragment in children:
+                        # NOTE: because we're deleting on the fly this means that it shouldn't fail
+                        # when all heads of fragments are children in other fragments because the last
+                        # fragment won't have anything to check against so you are still left with at least 
+                        # one fragment
+                        del heads_of_fragments[i]
+            
+            print("heads of fragments", heads_of_fragments)           
+            
+            print("unreachable head fragments", unreachable_head_fragments)
+            
+            # populate the pruned tree
+            for head_of_fragment in heads_of_fragments:
+                for parent, children in unreachable_head_fragments.items():
+                    if head_of_fragment == parent:
+                        pruned_tree[head_of_fragment] = children
+            
+            print("pruned tree", pruned_tree)
+            
+            # NAIVE SOLUTION: add 0:root to the head of the pruned tree.
             root_edge = "0:root"
             for i in range(len(annotated_sentence)):
-                #print(annotated_sentence[i])
                 conllu_id = annotated_sentence[i]["id"]
-                #print(conllu_id)
-                if conllu_id in unreachable_head_fragments.keys():
+                if conllu_id in pruned_tree.keys():
                     deps_object = annotated_sentence[i]["deps"]
                     altered_deps_object = deps_object + "|" + root_edge
                     annotated_sentence[i]["deps"] = altered_deps_object
-                    #print(annotated_sentence[i]["deps"])
-            
+
             conllu_annotations.append(annotated_sentence)
             
     return conllu_annotations
@@ -227,8 +262,17 @@ def decode_conllu_output(conllu_annotations):
 
 
 def write_conllu_output(decoded_conllu_annotations):
-
-    with codecs.open("a.conllu", 'w', encoding="utf-8") as f:
+    
+    # metadata
+    in_name = os.path.basename(args.input)
+    file_string = in_name.split('.')[0]
+    tbid = file_string.split('-')[0]
+    file_type = file_string.split('-')[-1]
+    
+    out_file_string = (f"{tbid}-ud-{file_type}.conllu")
+    out_file = os.path.join(args.outdir, out_file_string)
+    
+    with codecs.open(out_file, 'w', encoding="utf-8") as f:
         for sentence_blob in decoded_conllu_annotations:
             for sentence in sentence_blob:
                 f.write(sentence+'\n')
@@ -237,7 +281,7 @@ def write_conllu_output(decoded_conllu_annotations):
 
 if __name__ == '__main__':
     # alter the annotation
-    conllu_annotations = _read(file_path)
+    conllu_annotations = _read(args.input)
     
     # prepare output
     decoded_conllu_annotations = decode_conllu_output(conllu_annotations)
