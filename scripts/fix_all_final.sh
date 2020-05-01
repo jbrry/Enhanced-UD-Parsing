@@ -30,8 +30,15 @@ for file in $(ls $FINAL_DIR); do
     LCODE=$(echo ${file} | awk -F "_" '{print $2}')
     echo "using $LCODE"
 
-    # adjust path to tools if necessary
-    perl ${HOME}/tools/conllu-quick-fix.pl --connect-to-root < $TMP_DIR/$file > $FIXED_DIR/$LCODE.conllu
+    # apply own connect-to-root
+    CONNECTED_DIR=$TMP_DIR/connected
+    python scripts/connect_graph.py -i $TMP_DIR/$file -o $CONNECTED_DIR
+
+    # apply quick-fix
+    perl ${HOME}/tools/conllu-quick-fix.pl < $CONNECTED_DIR/$file > $FIXED_DIR/$LCODE.conllu
+
+    # validate the file
+    cat $FIXED_DIR/$LCODE.conllu | python ${HOME}/tools/validate.py --level 2 --lang $LCODE
 
 done 
 
