@@ -41,7 +41,6 @@ def traverse_root_children(
     # if we didn't add any new children, then we have included all reachable nodes
     if num_offspring_before == num_offspring_after:
         keep_searching_for_dependents = False
-        print("done")
     
     return nodes_reachable_from_root, keep_searching_for_dependents
 
@@ -69,7 +68,7 @@ def lazy_parse(text: str):
 
 def convert_deps_to_nested_list(deps):
     """
-    need to unpack deps items, e.g. '13:nsubj|19:nsubj:enh|20:nsubj:enh'
+    unpacks deps items, e.g. '13:nsubj|19:nsubj:enh|20:nsubj:enh'
     """
     enhanced_heads = []
     enhanced_deprels = [] # TODO?
@@ -82,13 +81,11 @@ def convert_deps_to_nested_list(deps):
         if len(split_deps) == 1:
             split_deps = split_deps.pop()
             head = split_deps.split(":")[0]
-            #if head != "_":
             current_heads.append(head)
         # more than one edep
         elif len(split_deps) > 1:
             for split_dep in split_deps:
                 head = split_dep.split(":")[0]
-                #if head != "_":
                 current_heads.append(head)
         
         enhanced_heads.append(current_heads)    
@@ -99,7 +96,6 @@ def convert_deps_to_nested_list(deps):
 def clean_ids(inputs):
     """Remove MWT ids."""
     for i, x in enumerate(inputs):
-        # remove MWT ids
         if "-" in x:
             del inputs[i]
     return inputs
@@ -115,23 +111,42 @@ def clean_eheads(inputs):
 
 
 def _read(file_path):
-    logger.info("Reading semantic dependency parsing data from: %s", file_path)
+    logger.info("Reading data from: %s", file_path)
     
     # store each annotated sentence
     conllu_annotations = []
     
-    with open(file_path) as sdp_file:
-        for annotated_sentence in lazy_parse(sdp_file.read()):
+    tree_number = 1
+    with open(file_path) as conllu_file:
+        for annotated_sentence in lazy_parse(conllu_file.read()):
 
+            #print(f"tree number {tree_number}")
             full_ids = [x["id"] for x in annotated_sentence]
             ids = clean_ids(full_ids)
             
-            heads = [x["head"] for x in annotated_sentence]            
+            heads = [x["head"] for x in annotated_sentence]
             deprels = [x["deprel"] for x in annotated_sentence]
             deps = [x["deps"] for x in annotated_sentence]
-
+            
             unfiltered_enhanced_heads = convert_deps_to_nested_list(deps)
             enhanced_heads = clean_eheads(unfiltered_enhanced_heads)
+            
+            # fix; sometimes the parser may not predict a 0:root edge
+            has_seen_root = False
+            for ehead_list in enhanced_heads:
+                for ehead in ehead_list:
+                    if ehead == "0":
+                        has_seen_root = True
+                    
+            if not has_seen_root:
+                # if the enhanced parser didn't predict a root edge, take the root edge
+                # from basic and re-try
+                for i in range(len(annotated_sentence)):
+                    head = annotated_sentence[i]["head"]
+                    if head == "0":
+                        # fix the annotation
+                        annotated_sentence[i]["deps"] = "0:root"       
+                        enhanced_heads[i] = ["0"]
             
             assert len(ids) == len(enhanced_heads)
             
@@ -141,8 +156,6 @@ def _read(file_path):
             for conllu_id, head_list in zip(ids, enhanced_heads):
                 for head in head_list:
                     ids_to_heads[conllu_id].append(head)
-    
-            print("ids 2 heads", ids_to_heads)
                 
             # store nodes reachable from root  
             nodes_reachable_from_root = []
@@ -167,20 +180,21 @@ def _read(file_path):
                     nodes_reachable_from_root, 
                     keep_searching_for_dependents)
             
-            print("reachable nodes", nodes_reachable_from_root)    
+            #print("reachable nodes", nodes_reachable_from_root)    
             
             # 3) find remaining tokens
             unreachable_nodes = []
             for token_id, heads in ids_to_heads.items():
                     for head in heads:
                         if head != "0" and head not in nodes_reachable_from_root:
-                            unreachable_nodes.append(token_id)
+                            if token_id not in unreachable_nodes:
+                                unreachable_nodes.append(token_id)
             
-            print("unreachable nodes", unreachable_nodes)
+            #print("unreachable nodes", unreachable_nodes)
             
             # for the unreachable nodes we build fragments 
                        
-            # 4) find common parents of unreachable tokens          
+            # 4) find common parents of unreachable tokens        
             unreachable_head_fragments = {}
             
             for unreachable_node in unreachable_nodes:
@@ -193,54 +207,22 @@ def _read(file_path):
                 unreachable_heads = ids_to_heads[unreachable_node]
                 for unreachable_head in unreachable_heads:
                     if unreachable_head in unreachable_head_fragments:
-                        logger.warning(f"found unreachable head {unreachable_head}, creating fragments")
+                        #logger.warning(f"found unreachable head {unreachable_head}, creating fragments")
                         # get common children
                         unreachable_head_fragments[unreachable_head].append(unreachable_node)
                     else:
                         raise ValueError(f"could not find head for token {unreachable_node}")
                 
-            print("unreachable head fragments", unreachable_head_fragments)
+            #print("unreachable head fragments", unreachable_head_fragments)
             
-            # 5) See if any of the parents of fragmented trees are children
-            # in other fragmented trees. If so, remove the sub-fragmented tree
-            # as you can connect everything in the sub-fragmented tree for free
-            # when you attach to the main fragmented tree.
-            
-            pruned_tree = {}
-            
-            heads_of_fragments = list(unreachable_head_fragments.keys())
-            print("heads of fragments", heads_of_fragments)
-            
-            for i, head_of_fragment in enumerate(heads_of_fragments):
-                for parent, children in unreachable_head_fragments.items():
-                    # check if head of fragment is a child in another tree
-                    if head_of_fragment in children:
-                        # NOTE: because we're deleting on the fly this means that it shouldn't fail
-                        # when all heads of fragments are children in other fragments because the last
-                        # fragment won't have anything to check against so you are still left with at least 
-                        # one fragment
-                        del heads_of_fragments[i]
-            
-            print("heads of fragments", heads_of_fragments)           
-            
-            print("unreachable head fragments", unreachable_head_fragments)
-            
-            # populate the pruned tree
-            for head_of_fragment in heads_of_fragments:
-                for parent, children in unreachable_head_fragments.items():
-                    if head_of_fragment == parent:
-                        pruned_tree[head_of_fragment] = children
-            
-            print("pruned tree", pruned_tree)
-            
-            # NAIVE SOLUTION: add 0:root to the head of the pruned tree.
+            # naive solution: add 0:root to the head of each fragment.
             root_edge = "0:root"
             
             for i in range(len(annotated_sentence)):
                 conllu_id = annotated_sentence[i]["id"]
-                if conllu_id in pruned_tree.keys():
+                if conllu_id in unreachable_head_fragments.keys():
                     # if we want to make a best guess, we can take the basic parse's edge,
-                    # but it has to connect to the main graph...
+                    # but it has to connect to the main graph... Not Implemented
                     if args.mode == "best_guess":
                         best_guess_head = annotated_sentence[i]["head"]
                         best_guess_label = annotated_sentence[i]["deprel"]
@@ -254,6 +236,7 @@ def _read(file_path):
                     annotated_sentence[i]["deps"] = altered_deps_object
 
             conllu_annotations.append(annotated_sentence)
+            tree_number += 1
             
     return conllu_annotations
 
@@ -266,7 +249,6 @@ def decode_conllu_output(conllu_annotations):
             lines = [conllu_row[k] for k in FIELDS]
             conllu_lines = "\t".join(lines)
             conllu_sentence.append(conllu_lines)
-    
         decoded_conllu_annotations.append(conllu_sentence)
     
     return decoded_conllu_annotations
@@ -280,7 +262,8 @@ def write_conllu_output(decoded_conllu_annotations):
     tbid = file_string.split('-')[0]
     file_type = file_string.split('-')[-1]
     
-    out_file_string = (f"{tbid}-ud-{file_type}.conllu")
+    #out_file_string = (f"{tbid}-ud-{file_type}.conllu")
+    out_file_string = in_name
     out_file = os.path.join(args.outdir, out_file_string)
     
     with codecs.open(out_file, 'w', encoding="utf-8") as f:
