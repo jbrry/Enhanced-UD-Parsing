@@ -1,14 +1,9 @@
 # Enhanced UD Parsing
 
 Repository for enhanced UD parsing for the 2020 [IWPT/UD Shared Task](https://universaldependencies.org/iwpt20/).
+Team ADAPT.
 
-## Table of Contents
-
-- [Installation](#installation)
-- [Obtain data](#obtain-data)
-- [Train models](#train-models)
-
-## Installation
+## Semantic Parser Installation 
 
 If using a [Conda](https://conda.io/) environment, create a Conda environment with Python 3.7:
 
@@ -87,7 +82,8 @@ wget http://ufal.mff.cuni.cz/~zeman/soubory/iwpt2020-train-dev.tgz
 tar -xvzf iwpt2020-train-dev.tgz
 ```
 
-## Train models
+## Train semantic parser models
+
 Currently, this project is still in development but you can run the most-recent version of the graph-parser(s) as below. The filepaths in the configuration file can be adjusted for a particular language or for quicker debugging you can use the en_ewt files as below:
 
 ```bash
@@ -113,3 +109,9 @@ Alternatively, you can use `train.sh` with the following arguments, where `${tas
 ```bash
 ./scripts/train.sh ${task_type} ${model_type} ${tbid}
 ```
+
+## Basic Parser
+
+* https://github.com/jowagner/UDPipe-Future/tree/multitreebank (use the `tbemb` branch, e.g. with `git checkout tbemb`)
+* https://github.com/jowagner/ud-combination
+
