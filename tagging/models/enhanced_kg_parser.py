@@ -56,10 +56,11 @@ class EnhancedKGParser(Model):
         encoder: Seq2SeqEncoder,
         tag_representation_dim: int,
         arc_representation_dim: int,
-        activation = Activation.by_name("tanh")(),
-        tag_feedforward: FeedForward = None,
-        arc_feedforward: FeedForward = None,
-        pos_tag_embedding: Embedding = None,
+        activation=Activation.by_name("tanh")(),
+        lemma_tag_embedding: Embedding = None,
+        upos_tag_embedding: Embedding = None,
+        xpos_tag_embedding: Embedding = None,
+        feats_tag_embedding: Embedding = None,
         dropout: float = 0.0,
         input_dropout: float = 0.0,
         edge_prediction_threshold: float = 0.5,
@@ -86,22 +87,32 @@ class EnhancedKGParser(Model):
         self.tag_head = Linear(encoder_dim, tag_representation_dim)
         self.tag_dep = Linear(encoder_dim, tag_representation_dim, bias=False)
         
-        num_labels = self.vocab.get_vocab_size("labels")
+        num_labels = self.vocab.get_vocab_size("deps")
         
         self.arc_out_layer = Linear(arc_representation_dim, 1, bias=False) # no bias in output layer of K&G model
         self.tag_out_layer = Linear(arc_representation_dim, num_labels)
-    
-        self._pos_tag_embedding = pos_tag_embedding or None
+
+        self._lemma_tag_embedding = lemma_tag_embedding or None
+        self._upos_tag_embedding = upos_tag_embedding or None
+        self._xpos_tag_embedding = xpos_tag_embedding or None
+        self._feats_tag_embedding = feats_tag_embedding or None
+
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
         
         # add a head sentinel to accommodate for extra root token
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
-            
+
         representation_dim = text_field_embedder.get_output_dim()
-        if pos_tag_embedding is not None:
-            representation_dim += pos_tag_embedding.get_output_dim()
-        
+        if lemma_tag_embedding is not None:
+            representation_dim += lemma_tag_embedding.get_output_dim()
+        if upos_tag_embedding is not None:
+            representation_dim += upos_tag_embedding.get_output_dim()
+        if xpos_tag_embedding is not None:
+            representation_dim += xpos_tag_embedding.get_output_dim()
+        if feats_tag_embedding is not None:
+            representation_dim += feats_tag_embedding.get_output_dim()
+
         check_dimensions_match(
             representation_dim,
             encoder.get_input_dim(),
@@ -110,7 +121,6 @@ class EnhancedKGParser(Model):
         )
         
         self._enhanced_attachment_scores = EnhancedAttachmentScores()
-        
         self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction="none")
         self._tag_loss = torch.nn.CrossEntropyLoss(reduction="none")        
         initializer(self)
@@ -119,7 +129,10 @@ class EnhancedKGParser(Model):
     def forward(
         self,  # type: ignore
         tokens: TextFieldTensors,
-        pos_tags: torch.LongTensor = None,
+        lemmas: torch.LongTensor = None,
+        upos: torch.LongTensor = None,
+        xpos: torch.LongTensor = None,
+        feats: torch.LongTensor = None,
         metadata: List[Dict[str, Any]] = None,
         enhanced_tags: torch.LongTensor = None,
     ) -> Dict[str, torch.Tensor]:
@@ -143,24 +156,61 @@ class EnhancedKGParser(Model):
         An output dictionary.
         """
         embedded_text_input = self.text_field_embedder(tokens)
-        if pos_tags is not None and self._pos_tag_embedding is not None:
-            embedded_pos_tags = self._pos_tag_embedding(pos_tags)
-            embedded_text_input = torch.cat([embedded_text_input, embedded_pos_tags], -1)
-        elif self._pos_tag_embedding is not None:
+        concatenated_input = [embedded_text_input]
+        if upos is not None and self._upos_tag_embedding is not None:
+            concatenated_input.append(self._upos_tag_embedding(upos))
+        elif self._upos_tag_embedding is not None:
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
-            
-        mask = get_text_field_mask(tokens)    
+
+        if lemmas is not None and self._lemma_tag_embedding is not None:
+            concatenated_input.append(self._lemma_tag_embedding(lemmas))
+        if xpos is not None and self._xpos_tag_embedding is not None:
+            concatenated_input.append(self._xpos_tag_embedding(xpos))
+        if feats is not None and self._feats_tag_embedding is not None:
+            batch_size, sequence_len, max_len = feats.size()
+            # shape: (batch, seq_len, max_len)
+            feats_mask = (feats != -1).long()
+            feats = feats * feats_mask
+            # tensor corresponding to the number of active components, e.g. morphological features
+            number_active_components = feats_mask.sum(-1)
+            # a padding token's summed vector will be filled with 0s and when this is divided by 0
+            # it will return a NaN so we replaces 0s with 1s in the denominator tensor to avoid this.
+            number_active_components[number_active_components == 0] = 1
+
+            feats_embeddings = []
+            # shape: (seq_len, max_len)
+            for feat_tensor in feats:
+                # shape: (seq_len, max_len, emb_dim)
+                embedded_feats = self._feats_tag_embedding(feat_tensor)
+                feats_embeddings.append(embedded_feats)
+            # shape: (batch, seq_len, max_len, emb_dim)
+            stacked_feats_tensor = torch.stack(feats_embeddings)
+            tag_embedding_dim = stacked_feats_tensor.size(-1)
+            feats_mask_expanded = feats_mask.unsqueeze_(-1).expand(batch_size, sequence_len, max_len, tag_embedding_dim)
+            # shape: (batch, seq_len, max_len, emb_dim)
+            masked_feats = stacked_feats_tensor * feats_mask_expanded
+            # shape: (batch, seq_len, tag_embedding_dim)
+            combined_masked_feats = masked_feats.sum(2)
+            expanded_number_active_components = number_active_components.unsqueeze(-1).expand(batch_size, sequence_len,
+                                                                                              tag_embedding_dim)
+            # divide the summed feats vectors by the number of non-padded elements
+            averaged_feats = combined_masked_feats / expanded_number_active_components
+            concatenated_input.append(averaged_feats)
+
+        if len(concatenated_input) > 1:
+            embedded_text_input = torch.cat(concatenated_input, -1)
+
+        mask = get_text_field_mask(tokens)
         embedded_text_input = self._input_dropout(embedded_text_input)
         encoded_text = self.encoder(embedded_text_input, mask)
-        
-        batch_size, sequence_length, encoding_dim = encoded_text.size()
-        
+
+        batch_size, _, encoding_dim = encoded_text.size()
+
         head_sentinel = self._head_sentinel.expand(batch_size, 1, encoding_dim)
         # Concatenate the head sentinel onto the sentence representation.
         encoded_text = torch.cat([head_sentinel, encoded_text], 1)
-        encoded_text = self._dropout(encoded_text)
-        
         mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
+        encoded_text = self._dropout(encoded_text)
                 
         # shape (batch_size, sequence_length, arc_representation_dim)
         head_arc_representation = self.edge_head(encoded_text)
@@ -206,11 +256,19 @@ class EnhancedKGParser(Model):
         output_dict = {"arc_probs": arc_probs, "arc_tag_probs": arc_tag_probs, "mask": mask}
 
         if metadata:
+            output_dict["conllu_metadata"] = [meta["conllu_metadata"] for meta in metadata]
             output_dict["ids"] = [meta["ids"] for meta in metadata]
-            output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]
             output_dict["tokens"] = [meta["tokens"] for meta in metadata]
+            output_dict["lemmas"] = [meta["lemmas"] for meta in metadata]
+            output_dict["upos"] = [meta["upos_tags"] for meta in metadata]
+            output_dict["xpos"] = [meta["xpos_tags"] for meta in metadata]
+            output_dict["feats"] = [meta["feats"] for meta in metadata]
             output_dict["head_tags"] = [meta["head_tags"] for meta in metadata]
             output_dict["head_indices"] = [meta["head_indices"] for meta in metadata]
+            output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]
+            output_dict["misc"] = [meta["misc"] for meta in metadata]
+            output_dict["multiword_ids"] = [x["multiword_ids"] for x in metadata if "multiword_ids" in x]
+            output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x]
             
         if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(
@@ -238,7 +296,7 @@ class EnhancedKGParser(Model):
             self._enhanced_attachment_scores(predicted_arcs, predicted_arc_tags, predicted_labeled_arcs, \
                                              gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
 
-        return output_dict        
+        return output_dict
 
     @overrides
     def make_output_human_readable(
@@ -246,15 +304,15 @@ class EnhancedKGParser(Model):
     ) -> Dict[str, torch.Tensor]:
         arc_tag_probs = output_dict["arc_tag_probs"].cpu().detach().numpy()
         arc_probs = output_dict["arc_probs"].cpu().detach().numpy()
-        mask = output_dict["mask"]    
+        mask = output_dict["mask"]
         lengths = get_lengths_from_binary_sequence_mask(mask)
         arcs = []
         arc_tags = []
         # append arc and label to calculate ELAS
         labeled_arcs = []
-        
+
         for instance_arc_probs, instance_arc_tag_probs, length in zip(
-            arc_probs, arc_tag_probs, lengths
+                arc_probs, arc_tag_probs, lengths
         ):
             arc_matrix = instance_arc_probs > self.edge_prediction_threshold
             edges = []
@@ -262,35 +320,34 @@ class EnhancedKGParser(Model):
             edges_and_tags = []
             # dictionary where a word has been assigned a head
             found_heads = {}
-            # Note: manually selecting the most probable edge will result in slightly different F1 scores 
+            # Note: manually selecting the most probable edge will result in slightly different F1 scores
             # between F1Measure and EnhancedAttachmentScores
             # set each label to False but will be updated as True if the word has a head over the threshold
             for i in range(length):
                 found_heads[i] = False
-            
+
             for i in range(length):
                 for j in range(length):
                     if arc_matrix[i, j] == 1:
                         head_modifier_tuple = (i, j)
                         edges.append(head_modifier_tuple)
                         tag = instance_arc_tag_probs[i, j].argmax(-1)
-                        edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
+                        edge_tags.append(self.vocab.get_token_from_index(tag, "deps"))
                         # append ((h,m), label) tuple
-                        edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "labels")))
+                        edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "deps")))
                         found_heads[j] = True
-                                                
+
             # some words won't have found heads so we will find the edge with the highest probability for each unassigned word
-            # could lower the threshold for these cases or else just do the max
             head_information = found_heads.items()
             unassigned_tokens = []
             for (word, has_found_head) in head_information:
-                # not interested in selecting heads for the dummy ROOT token
+                # we're not interested in selecting heads for the dummy ROOT token
                 if has_found_head == False and word != 0:
                     unassigned_tokens.append(word)
-                                
+
             if len(unassigned_tokens) >= 1:
                 head_choices = {unassigned_token: [] for unassigned_token in unassigned_tokens}
-                
+
                 # keep track of the probabilities of the other words being heads of the unassigned tokens
                 for i in range(length):
                     for j in unassigned_tokens:
@@ -299,21 +356,20 @@ class EnhancedKGParser(Model):
                         # score
                         probability = instance_arc_probs[i, j]
                         head_choices[j].append((head_modifier_tuple, probability))
-                        
+
                 for unassigned_token, edge_score_tuples in head_choices.items():
                     # get the best edge for each unassigned token based on the score which is element [1] in the tuple.
-                    best_edge = max(edge_score_tuples, key = itemgetter(1))[0]
-                    
+                    best_edge = max(edge_score_tuples, key=itemgetter(1))[0]
+
                     edges.append(best_edge)
-                    tag = instance_arc_tag_probs[best_edge].argmax(-1)                   
-                    edge_tags.append(self.vocab.get_token_from_index(tag, "labels"))
-                    edges_and_tags.append((best_edge, self.vocab.get_token_from_index(tag, "labels")))
+                    tag = instance_arc_tag_probs[best_edge].argmax(-1)
+                    edge_tags.append(self.vocab.get_token_from_index(tag, "deps"))
+                    edges_and_tags.append((best_edge, self.vocab.get_token_from_index(tag, "deps")))
 
             arcs.append(edges)
             arc_tags.append(edge_tags)
-            labeled_arcs.append(edges_and_tags)                        
-                        
-                        
+            labeled_arcs.append(edges_and_tags)
+
         output_dict["arcs"] = arcs
         output_dict["arc_tags"] = arc_tags
         output_dict["labeled_arcs"] = labeled_arcs
@@ -428,6 +484,5 @@ class EnhancedKGParser(Model):
         for metric, value in graph_results_dict.items():
             if metric in metrics_to_track:
                 metrics[metric] = value
-                
+
         return metrics
-        
