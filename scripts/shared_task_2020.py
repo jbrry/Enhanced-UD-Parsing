@@ -1065,6 +1065,12 @@ class Config_et(Config_with_more_datasets):
             return True
         return False
 
+    def get_additional_dataset_tbids(self):
+        return [
+            ('et_edt', False),
+            ('et_ewt', False),
+        ]
+
 class Config_fi(Config_with_more_datasets):
 
     def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
@@ -1074,6 +1080,12 @@ class Config_fi(Config_with_more_datasets):
         and basic_parsers[0].count('+') == 0:
             return True
         return False
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('fi_ftb', False),
+            ('fi_tdt', False),
+        ]
 
 class Config_fr(Config_with_more_datasets):
 
@@ -1134,6 +1146,12 @@ class Config_lt(Config_with_more_datasets):
         and basic_parsers[0].count('+') == 0:
             return True
         return False
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('lt_alksnis', False),
+            ('lt_hse', False),
+        ]
 
 class Config_lv(Config_with_more_datasets):
 
@@ -1220,6 +1238,12 @@ class Config_sv(Config_with_more_datasets):
         and basic_parsers[0].count('+') == 0:
             return True
         return False
+
+    def get_additional_dataset_tbids(self):
+        return [
+            ('sv_lines', False),
+            ('sv_talbanken', False),
+        ]
 
 class Config_ta(Config_with_more_datasets):
 
