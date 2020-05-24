@@ -4,6 +4,7 @@ import os
 from typing import Dict, List, Tuple
 import logging
 import codecs
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +90,36 @@ def get_lists_of_heads(deps_items):
 
 def without_mwt_ids(inputs):
     """Remove MWT ids."""
-    for i, x in enumerate(inputs):
-        if "-" in x:
-            del inputs[i]
-    return inputs
+    retval = []
+    for x in inputs:
+        if "-" not in x:
+            retval.append(x)
+    return retval
+
+def get_reachable(head_to_children, start_id, visited = None):
+    if visited is None:
+        visited = set()
+    if start_id in visited:
+        return visited
+    visited.add(start_id)
+    if not start_id in head_to_children:
+        return visited
+    for child in head_to_children[start_id]:
+        get_reachable(head_to_children, child, visited)
+    return visited
+
+def merge_deps(list_of_deps):
+    edges = set()
+    for deps in list_of_deps:
+        if deps == '_' or not deps:
+            continue
+        for hd in deps.split('|'):
+            h, d = hd.split(':', 1)
+            edges.add((float(h), d, hd))
+    if not edges:
+        return '_'
+    edges = sorted(list(edges))
+    return '|'.join([hd for _, _, hd in edges])
 
 def _read(file_path):
     logger.info("Reading data from: %s", file_path)
@@ -110,7 +137,7 @@ def _read(file_path):
             ids = without_mwt_ids(full_ids)
 
             enhanced_heads = get_lists_of_heads(
-                [x["deps"] for x in annotated_sentence]
+                [x["deps"] for x in annotated_sentence if x['id'] in ids]
             )
 
             # fix; sometimes the parser may not predict a 0:root edge
@@ -227,7 +254,7 @@ def _read(file_path):
                 # update graph
                 token_index = full_ids.index(selected_fragment_root)
                 deps = annotated_sentence[token_index]["deps"]
-                deps = merge_deps(deps, selected_edge)
+                deps = merge_deps((deps, selected_edge))
                 annotated_sentence[token_index]["deps"] = deps
                 head, _ = selected_edge.split(':', 1)
                 if not head in head_to_children:
@@ -243,6 +270,13 @@ def _read(file_path):
             event_counter['connected %3d unreachable fragments' %count_unreachable_fragments] += 1
             conllu_annotations.append(annotated_sentence)
             tree_number += 1
+
+    sys.stderr.write('Statistics:\n')
+    total = float(event_counter['sentence'])
+    for key in sorted(list(event_counter.keys())):
+        value = event_counter[key]
+        percentage = 100.0 * value / total
+        sys.stderr.write('\t%s\t%d\t%.2f%%\n' %(key, value, percentage))
 
     return conllu_annotations
 
