@@ -56,7 +56,7 @@ Options:
                             in this script)
 
     --best-basic            Only use configurations that use a best basic
-                            parser as specified in the language-specifig
+                            parser as specified in the language-specific
                             configurations in this script.
                             (Default: try all basic parser combinations)
 
@@ -488,35 +488,26 @@ class Config_default:
             basic_parsers = list(self.get_basic_parsers())
             # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
             n_basic_parsers = len(basic_parsers)
-            restrict_to_one = False
-            restrict_to_two = False
-            if n_basic_parsers > 20:
-                # TODO: prune list of parser to k-best parsers according to dev results
-                found_dev_results = False
-                if found_dev_results:
-                    raise NotImplementedError
-                else:
-                    print('Too many parsers. Two pass mode needed.')
-                    print('Individual parsers will be evaluated now.')
-                    print('Then run again to test combinations of the best parsers.')
-                    restrict_to_one = True
-                    combination_indices = []
-                    for i in range(n_basic_parsers):
-                        combination_indices.append(1<<i)
+            combination_indices = []
+            if n_basic_parsers > 64:
+                for i in range(n_basic_parsers):
+                    combination_indices.append(1<<i)
+            #elif n_basic_parsers <= 12:
+            #    combination_indices = range(1, 1 << n_basic_parsers)
             else:
-                if n_basic_parsers > 3:
-                    restrict_to_two = True
-                combination_indices = range(1, 1 << n_basic_parsers)
+                for i in range(n_basic_parsers):
+                    combination_indices.append(1<<i)
+                    for j in range(n_basic_parsers):
+                        if i != j:
+                            combination_indices.append((1<<i)+(1<<j))
             for combination_index in combination_indices:
                 combination = [basic_parsers[j]
                     for j in range(n_basic_parsers)
                     if (combination_index & (1 << j))
                 ]
                 combination_size = len(combination)
-                if restrict_to_one and combination_size > 1:
-                    continue
-                if restrict_to_two and combination_size > 2:
-                    continue
+                if combination_size == 2:
+                    reverse_combination = (combination[1], combination[0])
                 for enhanced_parser in self.get_enhanced_parsers():
                     for ensemble_size in self.get_ensemble_sizes():
                         if combination_size <= ensemble_size:
@@ -526,6 +517,8 @@ class Config_default:
                             ):
                                 continue
                             yield (segmenter, combination, enhanced_parser, ensemble_size)
+                            if combination_size == 2 and (ensemble_size % 2) == 1:
+                                yield (segmenter, reverse_combination, enhanced_parser, ensemble_size)
 
     def uses_best_basic_parser(self, segmenter, basic_parsers, enhanced_parser, ensemble_size):
         return True
@@ -567,7 +560,8 @@ class Config_default:
         return retval
 
     def get_ensemble_sizes(self):
-        return (3,5,7)
+        #return (3,5,7)
+        return (3,5,6,7,10,14)
 
     def get_basic_parser_ensemble_size(self):
         return self.variant[3]
@@ -594,7 +588,7 @@ class Config_default:
             length_limit = 999,
         )
 
-    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 18):
+    def filter_by_lcode_and_add_datasets(self, module_names, length_limit = 60):
         if self.options.debug:
             print('\tQuerying datasets for', self.tbid)
             sys.stdout.flush()
@@ -629,7 +623,21 @@ class Config_default:
                     n_all_tbids = len(all_tbids)
                     # https://stackoverflow.com/questions/1482308/how-to-get-all-subsets-of-a-set-powerset
                     n_datasets = len(datasets)
-                    for combination_index in range(1, 1 << n_datasets):
+                    combination_indices = []
+                    for i in range(n_datasets):
+                        combination_indices.append(1<<i)
+                    combi_all = (1 << n_datasets) - 1
+                    combination_indices.append(combi_all)
+                    if n_datasets > 7:
+                        print('8 or more datasets. Only considering mono-treebank models and the multi-treebank model using all datasets.')
+                    elif n_datasets > 4:
+                        print('Between 5 and 7 datasets. Only considering combinations of 1, n-1 and n datasets')
+                        for i in range(n_datasets):
+                            combination_indices.append(combi_all - (1<<i))
+                    else:
+                        # explore all 2**n - 1 non-empty combinations (1, 3, 7 or 15)
+                        combination_indices = range(1, 1 << n_datasets)
+                    for combination_index in combination_indices:
                         combination = [datasets[j]
                             for j in range(n_datasets)
                             if (combination_index & (1 << j))
@@ -665,6 +673,9 @@ class Config_default:
                                 print('\t\t\t--> duplicate tbid, skipping')
                             continue
                         tbid_combi = tuple(sorted(data_tbids))
+                        if tbid_combi in tbid_combinations_covered:
+                            if self.options.debug:
+                                print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
                         if not contains_target_lcode:
                             # dataset combination has no data with the
                             # target lcode --> skip
@@ -697,10 +708,6 @@ class Config_default:
                         if len(combination) == 1 \
                         and contains_ud25_data   \
                         and my_module.has_ud25_model_for_tbid(combination[0][5:]):
-                            if tbid_combi in tbid_combinations_covered:
-                                if self.options.debug:
-                                    print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
-                            else:
                                 retval.append((priority, ':'.join((module_name, combination[0]))))
                                 tbid_combinations_covered[tbid_combi] = combination
                                 if self.options.debug:
@@ -708,19 +715,11 @@ class Config_default:
                         if len(combination) == 1 \
                         and contains_task_data   \
                         and my_module.has_task_model_for_tbid(combination[0][5:]):
-                            if tbid_combi in tbid_combinations_covered:
-                                if self.options.debug:
-                                    print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
-                            else:
                                 retval.append((priority, ':'.join((module_name, combination[0]))))
                                 tbid_combinations_covered[tbid_combi] = combination
                                 if self.options.debug:
                                     print('\t\t\t--> added data as module has a task model ready')
                         elif my_module.can_train_on(contains_ud25_data, contains_task_data, is_polyglot):
-                            if tbid_combi in tbid_combinations_covered:
-                                if self.options.debug:
-                                    print('\t\t\t-->not adding as already have', tbid_combinations_covered[tbid_combi])
-                            else:
                                 retval.append((priority, ':'.join((module_name, '+'.join(combination)))))
                                 tbid_combinations_covered[tbid_combi] = combination
                                 if self.options.debug:
