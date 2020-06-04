@@ -96,7 +96,7 @@ def without_mwt_ids(inputs):
             retval.append(x)
     return retval
 
-def get_reachable(head_to_children, start_id, visited = None):
+def get_reachable(head_to_children, start_id, visited = None, restricted_to = None):
     if visited is None:
         visited = set()
     if start_id in visited:
@@ -105,7 +105,10 @@ def get_reachable(head_to_children, start_id, visited = None):
     if not start_id in head_to_children:
         return visited
     for child in head_to_children[start_id]:
-        get_reachable(head_to_children, child, visited)
+        if restricted_to and not child in restricted_to:
+            # do no visit this child
+            continue
+        get_reachable(head_to_children, child, visited, restricted_to)
     return visited
 
 def merge_deps(list_of_deps):
@@ -216,7 +219,8 @@ def _read(file_path):
                 best_fragment_size = 0
                 for unreachable_node in unreachable_nodes:
                     fragment = get_reachable(
-                        head_to_children, unreachable_node
+                        head_to_children, unreachable_node,
+                        restricted_to = unreachable_nodes
                     )
                     fragment_size = len(fragment)
                     if fragment_size < best_fragment_size:
@@ -246,6 +250,8 @@ def _read(file_path):
                             selected_fragment = fragment
                             label = annotated_sentence[token_index]['deprel']
                             selected_edge = ':'.join((head, label))
+                            event_counter['connecting with edge from basic tree'] += 1
+                            event_counter['adding edge from basic tree with label ' + label] += 1
                             break
                 if selected_fragment_root is None:
                     selected_fragment_root = candidates[0][1]
