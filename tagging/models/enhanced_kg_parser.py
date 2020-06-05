@@ -1,7 +1,10 @@
+# original AllenNLP implementation: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
+# modified with edge-scoring code of https://github.com/coli-saar/am-parser
+
 from typing import Dict, Tuple, Any, List
 import logging
 import copy
-from operator import itemgetter 
+from operator import itemgetter
 
 from overrides import overrides
 import torch
@@ -68,7 +71,7 @@ class EnhancedKGParser(Model):
         **kwargs,
     ) -> None:
         super().__init__(vocab, **kwargs)
-        
+
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
         self.activation = activation
@@ -83,12 +86,12 @@ class EnhancedKGParser(Model):
         # this is the trick described by Kiperwasser and Goldberg to make training faster.
         self.edge_head = Linear(encoder_dim, arc_representation_dim)
         self.edge_dep = Linear(encoder_dim, arc_representation_dim, bias=False) # bias is already added by edge_head
-        
+
         self.tag_head = Linear(encoder_dim, tag_representation_dim)
         self.tag_dep = Linear(encoder_dim, tag_representation_dim, bias=False)
-        
+
         num_labels = self.vocab.get_vocab_size("deps")
-        
+
         self.arc_out_layer = Linear(arc_representation_dim, 1, bias=False) # no bias in output layer of K&G model
         self.tag_out_layer = Linear(arc_representation_dim, num_labels)
 
@@ -99,7 +102,7 @@ class EnhancedKGParser(Model):
 
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
-        
+
         # add a head sentinel to accommodate for extra root token
         self._head_sentinel = torch.nn.Parameter(torch.randn([1, 1, encoder.get_output_dim()]))
 
@@ -119,10 +122,10 @@ class EnhancedKGParser(Model):
             "text field embedding dim",
             "encoder input dim",
         )
-        
+
         self._enhanced_attachment_scores = EnhancedAttachmentScores()
         self._arc_loss = torch.nn.BCEWithLogitsLoss(reduction="none")
-        self._tag_loss = torch.nn.CrossEntropyLoss(reduction="none")        
+        self._tag_loss = torch.nn.CrossEntropyLoss(reduction="none")
         initializer(self)
 
     @overrides
@@ -152,7 +155,7 @@ class EnhancedKGParser(Model):
             word in the dependency parse. Has shape ``(batch_size, sequence_length, sequence_length)``.
 
         # Returns
-        
+
         An output dictionary.
         """
         embedded_text_input = self.text_field_embedder(tokens)
@@ -211,31 +214,31 @@ class EnhancedKGParser(Model):
         encoded_text = torch.cat([head_sentinel, encoded_text], 1)
         mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
         encoded_text = self._dropout(encoded_text)
-                
+
         # shape (batch_size, sequence_length, arc_representation_dim)
         head_arc_representation = self.edge_head(encoded_text)
         child_arc_representation = self.edge_dep(encoded_text)
-        
-        # shape (batch_size, sequence_length, tag_representation_dim)        
+
+        # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag_representation = self.tag_head(encoded_text)
         child_tag_representation = self.tag_dep(encoded_text)
-         
+
         # calculate dimensions again as sequence_length is now + 1 from adding the head_sentinel
         batch_size, sequence_length, arc_dim = head_arc_representation.size()
-        
+
         # now repeat the token representations to form a matrix so that every possible head-dep pair is considered:
         # shape (batch_size, sequence_length, sequence_length, arc_representation_dim)
         heads = head_arc_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, arc_dim) # heads in one direction
-        deps = child_arc_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, arc_dim).transpose(1, 2) # deps in the other direction  
-        
+        deps = child_arc_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, arc_dim).transpose(1, 2) # deps in the other direction
+
         # shape (batch_size, sequence_length, sequence_length, arc_representation_dim)
         combined_arcs = self.activation(heads + deps)
 
         # shape (batch_size, sequence_length, sequence_length)
         arc_scores = self.arc_out_layer(combined_arcs).squeeze(3)
 
-        batch_size, sequence_length, tag_dim = head_tag_representation.size()        
-        
+        batch_size, sequence_length, tag_dim = head_tag_representation.size()
+
         # now repeat the token representations to form a matrix so that every possible head-dep pair is considered:
         # shape (batch_size, sequence_length, sequence_length, tag_representation_dim)
         head_tags = head_tag_representation.repeat(1, sequence_length, 1).reshape(batch_size, sequence_length, sequence_length, tag_dim) # heads in one direction
@@ -250,9 +253,9 @@ class EnhancedKGParser(Model):
         # Since we'll be doing some additions, using the min value will cause underflow
         minus_mask = ~mask * min_value_of_dtype(arc_scores.dtype) / 10
         arc_scores = arc_scores + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
-        
+
         arc_probs, arc_tag_probs = self._greedy_decode(arc_scores, arc_tag_logits, mask)
-        
+
         output_dict = {"arc_probs": arc_probs, "arc_tag_probs": arc_tag_probs, "mask": mask}
 
         if metadata:
@@ -269,29 +272,29 @@ class EnhancedKGParser(Model):
             output_dict["misc"] = [meta["misc"] for meta in metadata]
             output_dict["multiword_ids"] = [x["multiword_ids"] for x in metadata if "multiword_ids" in x]
             output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x]
-            
+
         if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(
                 arc_scores=arc_scores, arc_tag_logits=arc_tag_logits, enhanced_tags=enhanced_tags, mask=mask
             )
-            
+
             output_dict["loss"] = arc_nll + tag_nll
             output_dict["arc_loss"] = arc_nll
             output_dict["tag_loss"] = tag_nll
 
             # get human readable output to computed enhanced graph metrics
             output_dict = self.make_output_human_readable(output_dict)
-            
+
             # predicted arcs, arc_tags
             predicted_arcs = output_dict["arcs"]
             predicted_arc_tags = output_dict["arc_tags"]
             predicted_labeled_arcs = output_dict["labeled_arcs"]
-            
+
             # gold arcs, arc_tags
             gold_arcs = [meta["arc_indices"] for meta in metadata]
             gold_arc_tags = [meta["arc_tags"] for meta in metadata]
             gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
-            
+
             tag_mask = mask.unsqueeze(1) & mask.unsqueeze(2)
             self._enhanced_attachment_scores(predicted_arcs, predicted_arc_tags, predicted_labeled_arcs, \
                                              gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
@@ -385,9 +388,9 @@ class EnhancedKGParser(Model):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the arc and tag loss for an adjacency matrix.
-        
+
         # Parameters
-        
+
         arc_scores : `torch.Tensor`, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate a
             binary classification decision for whether an edge is present between two words.
@@ -439,9 +442,9 @@ class EnhancedKGParser(Model):
         Decodes the head and head tag predictions by decoding the unlabeled arcs
         independently for each word and then again, predicting the head tags of
         these greedily chosen arcs independently.
-        
+
         # Parameters
-        
+
         arc_scores : `torch.Tensor`, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
@@ -450,9 +453,9 @@ class EnhancedKGParser(Model):
             generate a distribution over tags for each arc.
         mask : `torch.BoolTensor`, required.
             A mask of shape (batch_size, sequence_length).
-            
+
         # Returns
-        
+
         arc_probs : `torch.Tensor`
             A tensor of shape (batch_size, sequence_length, sequence_length) representing the
             probability of an arc being present for this edge.

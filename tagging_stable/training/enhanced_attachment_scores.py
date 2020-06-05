@@ -1,3 +1,5 @@
+# based on: https://github.com/allenai/allennlp/blob/master/allennlp/training/metrics/attachment_scores.py
+
 from typing import Optional, List
 
 from overrides import overrides
@@ -10,15 +12,15 @@ from allennlp.training.metrics.metric import Metric
 class EnhancedAttachmentScores(Metric):
     """
     Computes unlabeled precision, recall and f1.
-    As the parser uses a sigmoid, initially it will predict numerous edges 
+    As the parser uses a sigmoid, initially it will predict numerous edges
     therefore making recall high but precision low.
-    
+
     :precision: correct / system_total
     :recall: correct / gold_total
     :f1: 2 * correct / (system_total + gold_total)
-    
+
     TODO: need to figure out how to mask punctuation which is ignored.
-    
+
     # Parameters
     ignore_classes : `List[int]`, optional (default = None)
         A list of label ids to ignore when computing metrics.
@@ -64,26 +66,20 @@ class EnhancedAttachmentScores(Metric):
         )
         predicted_indices, predicted_labels, gold_indices, gold_labels, mask = unwrapped
 
-        #print("this is a new batch")
-        
-        # first do UAS and LAS separately (TODO: do more efficiently)
-        
         # UAS
         for gold_edges, gold_edge_labels, predicted_edges, predicted_edge_labels in zip(gold_indices, gold_labels, predicted_indices, predicted_labels):
             self._num_gold_edges += len(gold_edges)
-            self._num_pred_edges += len(predicted_edges)        
+            self._num_pred_edges += len(predicted_edges)
             for predicted_edge in predicted_edges:
                 if predicted_edge in gold_edges:
                     self._unlabeled_correct += 1.
-        
+
         # LAS
         for gold_labeled_edges, predicted_labeled_edges in zip(gold_labeled_arcs, predicted_labeled_arcs):
-            #print(gold_labeled_edges, "-->", predicted_labeled_edges)
-        
             for predicted_labeled_edge in predicted_labeled_edges:
                 if predicted_labeled_edge in gold_labeled_edges:
                     self._labeled_correct += 1.
-            
+
 
 
     def get_metric(self, reset: bool = False):
@@ -91,36 +87,31 @@ class EnhancedAttachmentScores(Metric):
         # Returns
         The accumulated metrics as a dictionary.
         """
-        #unlabeled_attachment_score = 0.0
-        #labeled_attachment_score = 0.0
-        
         unlabeled_precision = 0.0
         unlabeled_recall = 0.0
         unlabeled_f1 = 0.0
-        
+
         labeled_precision = 0.0
         labeled_recall = 0.0
         labeled_f1 = 0.0
 
-        
-        if self._num_gold_edges > 0.0:         
+
+        if self._num_gold_edges > 0.0:
             # precision
             unlabeled_precision = self._unlabeled_correct / self._num_pred_edges
             labeled_precision = self._labeled_correct / self._num_pred_edges
-            
+
             # recall
             unlabeled_recall = self._unlabeled_correct / self._num_gold_edges
             labeled_recall = self._labeled_correct / self._num_gold_edges
-            
+
             # f1
             unlabeled_f1 = 2 * self._unlabeled_correct / (self._num_pred_edges + self._num_gold_edges)
             labeled_f1 = 2 * self._labeled_correct / (self._num_pred_edges + self._num_gold_edges)
-   
+
         if reset:
             self.reset()
         return {
-#            "EUAS": unlabeled_attachment_score,
-#            "ELAS": labeled_attachment_score
             "unlabeled_precision": unlabeled_precision,
             "unlabeled_recall": unlabeled_recall,
             "unlabeled_f1": unlabeled_f1,

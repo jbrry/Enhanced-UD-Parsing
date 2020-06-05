@@ -1,3 +1,5 @@
+# original implementation: https://github.com/allenai/allennlp/blob/master/allennlp/data/fields/adjacency_field.py
+
 from typing import Dict, List, Set, Tuple
 import logging
 import textwrap

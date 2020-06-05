@@ -1,4 +1,5 @@
-# feature extraction/MWT processing is based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
+# based on the `universal_dependencies` dataset reader in: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/dataset_readers/universal_dependencies.py
+# feature extraction is based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
 
 from typing import Dict, Tuple, List, Any, Callable
 import logging
@@ -23,7 +24,7 @@ def process_multiword_and_elided_tokens(annotation):
     When a token is a MWT, the id is set to None so the token is not used in the model.
     Elided token ids are returned as tuples by the conllu library and are converted to a number id here.
     """
-    
+
     for i in range(len(annotation)):
         conllu_id = annotation[i]["id"]
         if type(conllu_id) == tuple:
@@ -36,12 +37,12 @@ def process_multiword_and_elided_tokens(annotation):
                 conllu_id = str(conllu_id[0]) + "." + str(conllu_id[2])
                 conllu_id = float(conllu_id)
                 annotation[i]["elided_id"] = conllu_id
-                annotation[i]["id"] = conllu_id 
+                annotation[i]["id"] = conllu_id
                 annotation[i]["multi_id"] = None
         else:
             annotation[i]["elided_id"] =  None
             annotation[i]["multi_id"] = None
-    
+
     return annotation
 
 
@@ -76,14 +77,14 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         # Parameters
         deps : ``List[List[Tuple[str, int]]]``
             The enhanced dependency relations.
-        
+
         # Returns
         List-of-lists containing the enhanced tags and heads.
         """
         rels = []
         heads = []
-            
-        for target_output in deps:        
+
+        for target_output in deps:
             # check if there is just 1 head
             if len(target_output) == 1:
                 rel = [x[0] for x in target_output]
@@ -100,31 +101,31 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     current_heads.append(rel_head_tuple[1])
                 heads.append(current_heads)
                 rels.append(current_rels)
-                
+
         return rels, heads
 
 
     def _process_elided_tokens(self, ids, heads):
         """
         Changes elided token format from tuples to float values.
-        We create a dictionary which maps the original CoNLL-U indices to 
+        We create a dictionary which maps the original CoNLL-U indices to
         indices based on the order they appear in the sentence.
         This means that when an elided token is encountered, e.g. "8.1",
         we map the index to "9" and offset every other index following this token by +1.
         This process is done every time an elided token is encountered.
         At decoding the time, the (head:dependent) tuples are converted back to the original indices.
-        
+
         # Parameters
         ids : ``List[Union[int, tuple]``
             The original CoNLLU indices of the tokens in the sentence. They will be
             used as keys in a dictionary to map from original to new indices.
         """
         processed_heads = []
-        # store the indices of words as they appear in the sentence        
+        # store the indices of words as they appear in the sentence
         original_to_new_indices = {}
         # set a placeholder for ROOT
         original_to_new_indices[0] = 0
-        
+
         for token_index, head_list in enumerate(heads):
             conllu_id = ids[token_index]
             # map the original CoNLL-U IDs to the new 1-indexed IDs
@@ -141,7 +142,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     # regular head id
                     current_heads.append(head)
             processed_heads.append(current_heads)
-        
+
         # change the indices of the heads to reflect the new order
         augmented_heads = []
         for head_list in processed_heads:
@@ -163,31 +164,31 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         with open(file_path, "r") as conllu_file:
             logger.info("Reading UD instances from conllu dataset at: %s", file_path)
-            
+
             for annotation in parse_incr(conllu_file):
                 conllu_metadata = []
                 metadata = annotation.metadata
                 for k, v in metadata.items():
                     metadata_line = (f"# {k} = {v}")
                     conllu_metadata.append(metadata_line)
-    
+
                 self.contains_elided_token = False
                 annotation = process_multiword_and_elided_tokens(annotation)
                 multiword_tokens = [x for x in annotation if x["multi_id"] is not None]
                 elided_tokens = [x for x in annotation if x["elided_id"] is not None]
                 if len(elided_tokens) >= 1:
                     self.contains_elided_token = True
-                
+
                 # considers all tokens except MWTs for prediction
                 annotation = [x for x in annotation if x["id"] is not None]
-                
+
                 if len(annotation) == 0:
                     continue
 
                 def get_field(tag: str, map_fn: Callable[[Any], Any] = None) -> List[Any]:
                     map_fn = map_fn if map_fn is not None else lambda x: x
                     return [map_fn(x[tag]) if x[tag] is not None else "_" for x in annotation if tag in x]
-                
+
                 # Extract multiword token rows (not used for prediction, purely for evaluation)
                 ids = [x["id"] for x in annotation]
                 multiword_ids = [x["multi_id"] for x in multiword_tokens]
@@ -198,19 +199,19 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 xpos_tags = get_field("xpostag")
                 feats = get_field("feats", lambda x: "|".join(k + "=" + v for k, v in x.items())
                                      if hasattr(x, "items") else "_")
-                
+
                 misc = get_field("misc", lambda x: "|".join(k + "=" + v if v is not None else k + "=" + "" for k, v in x.items())
                                     if hasattr(x, "items") else "_")
-                                
+
                 heads = get_field("head")
                 dep_rels = get_field("deprel")
                 dependencies = list(zip(dep_rels, heads))
                 deps = get_field("deps")
-                   
+
                 yield self.text_to_instance(tokens, lemmas, upos_tags, xpos_tags,
                                             feats, dependencies, deps, ids, misc,
                                             multiword_ids, multiword_forms, conllu_metadata)
-     
+
     @overrides
     def text_to_instance(
         self,  # type: ignore
@@ -242,7 +243,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         deps : ``List[List[Tuple[str, int]]]``, optional (default = None)
             A list of lists of (head tag, head index) tuples. Indices are 1 indexed,
             meaning an index of 0 corresponds to that word being the root of
-            the dependency tree.       
+            the dependency tree.
         # Returns
         An instance containing tokens, pos tags, basic and enhanced dependency head tags and head
         indices as fields.
@@ -252,12 +253,12 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
 
         # NOTE: in order for this reader to work with the old models, we need to remove some
         # of the features as the old model only uses upos, and we need to change some names.
-        # we can release this version so that experiments are reproducible but then add back 
+        # we can release this version so that experiments are reproducible but then add back
         # in the full functionality to the stable version so that extra features can be used there.
 
         token_field  = TextField([Token(t) for t in tokens], self._token_indexers)
         fields["tokens"] = token_field
-        
+
         fields["pos_tags"] = SequenceLabelField(upos_tags, token_field, label_namespace="pos")
 
         # new functionality
@@ -265,15 +266,15 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
         #all_tags = [upos_tags, xpos_tags, lemmas]
         #for name, field in zip(names, all_tags):
         #    if field:
-        #        fields[name] = SequenceLabelField(field, token_field, label_namespace=name)        
-        
+        #        fields[name] = SequenceLabelField(field, token_field, label_namespace=name)
+
         #sublist_fields = []
         #for atomic_feat in feats:
         #    feat_fields = ListField([LabelField(feat, label_namespace="feats")
-        #                              for feat in atomic_feat.split("|")])   
+        #                              for feat in atomic_feat.split("|")])
         #    sublist_fields.append(feat_fields)
         #fields["feats"] = ListField(sublist_fields)
-        
+
         # basic dependency tree
         if dependencies is not None:
             head_tags = [x[0] for x in dependencies]
@@ -286,7 +287,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
             #fields["head_indices"] = SequenceLabelField(
             #    [x[1] for x in dependencies], token_field, label_namespace="head_index_tags"
             #)
-        
+
         # enhanced dependencies
         if deps is not None:
             enhanced_arc_tags, enhanced_arc_indices = self._convert_deps_to_nested_sequences(deps)
@@ -296,13 +297,13 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 enhanced_arc_indices = augmented_heads
             else:
                 original_to_new_indices = None
-     
+
             assert len(enhanced_arc_tags) == len(enhanced_arc_indices), "each arc should have a label"
 
             arc_indices = []
             arc_tags = []
             arc_indices_and_tags = []
-            
+
             for modifier, head_list in enumerate(enhanced_arc_indices, start=1):
                 for head in head_list:
                     arc_indices.append((head, modifier))
@@ -312,7 +313,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                     arc_tags.append(relation)
 
             assert len(arc_indices) == len(arc_tags), "each arc should have a label"
-            
+
             for arc_index, arc_tag in zip(arc_indices, arc_tags):
                 arc_indices_and_tags.append((arc_index, arc_tag))
 
@@ -320,7 +321,7 @@ class UniversalDependenciesEnhancedDatasetReader(DatasetReader):
                 token_field_with_root = ['root'] + tokens
                 fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags)
                 #fields["enhanced_tags"] = RootedAdjacencyField(arc_indices, token_field_with_root, arc_tags, label_namespace="deps")
-        
+
         fields["metadata"] = MetadataField({
             "tokens": tokens,
             "upos_tags": upos_tags,

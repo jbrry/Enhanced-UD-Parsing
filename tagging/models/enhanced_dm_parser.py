@@ -1,7 +1,9 @@
+# original implementation: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
+
 from typing import Dict, Tuple, Any, List
 import logging
 import copy
-from operator import itemgetter 
+from operator import itemgetter
 
 from overrides import overrides
 import torch
@@ -30,7 +32,7 @@ class EnhancedDMParser(Model):
     This enhanced dependency parser follows the model of
     ` Deep Biaffine Attention for Neural Dependency Parsing (Dozat and Manning, 2016)
     <https://arxiv.org/abs/1611.01734>`_ .
-    
+
     Registered as a `Model` with name "graph_parser".
     # Parameters
     vocab : `Vocabulary`, required
@@ -62,7 +64,7 @@ class EnhancedDMParser(Model):
     initializer : `InitializerApplicator`, optional (default=`InitializerApplicator()`)
         Used to initialize the model parameters.
     """
-    
+
     def __init__(
         self,
         vocab: Vocabulary,
@@ -82,7 +84,7 @@ class EnhancedDMParser(Model):
         initializer: InitializerApplicator = InitializerApplicator(),
         **kwargs,
     ) -> None:
-        super().__init__(vocab, **kwargs)    
+        super().__init__(vocab, **kwargs)
 
         self.text_field_embedder = text_field_embedder
         self.encoder = encoder
@@ -116,7 +118,7 @@ class EnhancedDMParser(Model):
         self._upos_tag_embedding = upos_tag_embedding or None
         self._xpos_tag_embedding = xpos_tag_embedding or None
         self._feats_tag_embedding = feats_tag_embedding or None
-        
+
         self._dropout = InputVariationalDropout(dropout)
         self._input_dropout = Dropout(input_dropout)
 
@@ -132,7 +134,7 @@ class EnhancedDMParser(Model):
             representation_dim += xpos_tag_embedding.get_output_dim()
         if feats_tag_embedding is not None:
             representation_dim += feats_tag_embedding.get_output_dim()
-            
+
         check_dimensions_match(
             representation_dim,
             encoder.get_input_dim(),
@@ -184,50 +186,50 @@ class EnhancedDMParser(Model):
             word in the dependency parse. Has shape ``(batch_size, sequence_length, sequence_length)``.
 
         # Returns
-        
+
         An output dictionary.
         """
         embedded_text_input = self.text_field_embedder(tokens)
         concatenated_input = [embedded_text_input]
         if upos is not None and self._upos_tag_embedding is not None:
-            concatenated_input.append(self._upos_tag_embedding(upos))            
+            concatenated_input.append(self._upos_tag_embedding(upos))
         elif self._upos_tag_embedding is not None:
             raise ConfigurationError("Model uses a POS embedding, but no POS tags were passed.")
-            
+
         if lemmas is not None and self._lemma_tag_embedding is not None:
             concatenated_input.append(self._lemma_tag_embedding(lemmas))
         if xpos is not None and self._xpos_tag_embedding is not None:
-            concatenated_input.append(self._xpos_tag_embedding(xpos))        
-        if feats is not None and self._feats_tag_embedding is not None:            
+            concatenated_input.append(self._xpos_tag_embedding(xpos))
+        if feats is not None and self._feats_tag_embedding is not None:
             batch_size, sequence_len, max_len = feats.size()
             # shape: (batch, seq_len, max_len)
             feats_mask = (feats != -1).long()
             feats = feats * feats_mask
             # tensor corresponding to the number of active components, e.g. morphological features
             number_active_components = feats_mask.sum(-1)
-            # a padding token's summed vector will be filled with 0s and when this is divided by 0 
+            # a padding token's summed vector will be filled with 0s and when this is divided by 0
             # it will return a NaN so we replaces 0s with 1s in the denominator tensor to avoid this.
             number_active_components[number_active_components==0] = 1
-            
+
             feats_embeddings = []
             # shape: (seq_len, max_len)
-            for feat_tensor in feats:              
+            for feat_tensor in feats:
                 # shape: (seq_len, max_len, emb_dim)
                 embedded_feats = self._feats_tag_embedding(feat_tensor)
                 feats_embeddings.append(embedded_feats)
             # shape: (batch, seq_len, max_len, emb_dim)
             stacked_feats_tensor = torch.stack(feats_embeddings)
             tag_embedding_dim = stacked_feats_tensor.size(-1)
-            feats_mask_expanded = feats_mask.unsqueeze_(-1).expand(batch_size, sequence_len, max_len, tag_embedding_dim)            
+            feats_mask_expanded = feats_mask.unsqueeze_(-1).expand(batch_size, sequence_len, max_len, tag_embedding_dim)
             # shape: (batch, seq_len, max_len, emb_dim)
             masked_feats = stacked_feats_tensor * feats_mask_expanded
-            # shape: (batch, seq_len, tag_embedding_dim)            
-            combined_masked_feats = masked_feats.sum(2)            
-            expanded_number_active_components = number_active_components.unsqueeze(-1).expand(batch_size, sequence_len, tag_embedding_dim)                        
+            # shape: (batch, seq_len, tag_embedding_dim)
+            combined_masked_feats = masked_feats.sum(2)
+            expanded_number_active_components = number_active_components.unsqueeze(-1).expand(batch_size, sequence_len, tag_embedding_dim)
             # divide the summed feats vectors by the number of non-padded elements
             averaged_feats = combined_masked_feats / expanded_number_active_components
             concatenated_input.append(averaged_feats)
-            
+
         if len(concatenated_input) > 1:
             embedded_text_input = torch.cat(concatenated_input, -1)
 
@@ -243,24 +245,24 @@ class EnhancedDMParser(Model):
         encoded_text = torch.cat([head_sentinel, encoded_text], 1)
         mask = torch.cat([mask.new_ones(batch_size, 1), mask], 1)
         encoded_text = self._dropout(encoded_text)
-        
+
         # shape (batch_size, sequence_length, arc_representation_dim)
         head_arc_representation = self._dropout(self.head_arc_feedforward(encoded_text))
-        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))        
-        
+        child_arc_representation = self._dropout(self.child_arc_feedforward(encoded_text))
+
         # shape (batch_size, sequence_length, tag_representation_dim)
         head_tag_representation = self._dropout(self.head_tag_feedforward(encoded_text))
         child_tag_representation = self._dropout(self.child_tag_feedforward(encoded_text))
 
         # shape (batch_size, sequence_length, sequence_length)
         arc_scores = self.arc_attention(head_arc_representation, child_arc_representation)
-        
+
         # shape (batch_size, num_tags, sequence_length, sequence_length)
         arc_tag_logits = self.tag_bilinear(head_tag_representation, child_tag_representation)
 
         # Switch to (batch_size, sequence_length, sequence_length, num_tags)
         arc_tag_logits = arc_tag_logits.permute(0, 2, 3, 1).contiguous()
-        
+
         # Since we'll be doing some additions, using the min value will cause underflow
         minus_mask = ~mask * min_value_of_dtype(arc_scores.dtype) / 10
         arc_scores = arc_scores + minus_mask.unsqueeze(2) + minus_mask.unsqueeze(1)
@@ -278,38 +280,38 @@ class EnhancedDMParser(Model):
             output_dict["xpos"] = [meta["xpos_tags"] for meta in metadata]
             output_dict["feats"] = [meta["feats"] for meta in metadata]
             output_dict["head_tags"] = [meta["head_tags"] for meta in metadata]
-            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata] 
+            output_dict["head_indices"] = [meta["head_indices"] for meta in metadata]
             output_dict["original_to_new_indices"] = [meta["original_to_new_indices"] for meta in metadata]
             output_dict["misc"] = [meta["misc"] for meta in metadata]
             output_dict["multiword_ids"] = [x["multiword_ids"] for x in metadata if "multiword_ids" in x]
-            output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x]            
-        
+            output_dict["multiword_forms"] = [x["multiword_forms"] for x in metadata if "multiword_forms" in x]
+
         if enhanced_tags is not None:
             arc_nll, tag_nll = self._construct_loss(
                 arc_scores=arc_scores, arc_tag_logits=arc_tag_logits, enhanced_tags=enhanced_tags, mask=mask
             )
-            
+
             output_dict["loss"] = arc_nll + tag_nll
             output_dict["arc_loss"] = arc_nll
             output_dict["tag_loss"] = tag_nll
-                
+
             # get human readable output to computed enhanced graph metrics
             output_dict = self.make_output_human_readable(output_dict)
-            
+
             # predicted arcs, arc_tags
             predicted_arcs = output_dict["arcs"]
             predicted_arc_tags = output_dict["arc_tags"]
             predicted_labeled_arcs = output_dict["labeled_arcs"]
-            
+
             # gold arcs, arc_tags
             gold_arcs = [meta["arc_indices"] for meta in metadata]
             gold_arc_tags = [meta["arc_tags"] for meta in metadata]
             gold_labeled_arcs = [meta["labeled_arcs"] for meta in metadata]
-            
+
             tag_mask = mask.unsqueeze(1) & mask.unsqueeze(2)
             self._enhanced_attachment_scores(predicted_arcs, predicted_arc_tags, predicted_labeled_arcs, \
                                              gold_arcs, gold_arc_tags, gold_labeled_arcs, tag_mask)
-            
+
         return output_dict
 
 
@@ -319,13 +321,13 @@ class EnhancedDMParser(Model):
     ) -> Dict[str, torch.Tensor]:
         arc_tag_probs = output_dict["arc_tag_probs"].cpu().detach().numpy()
         arc_probs = output_dict["arc_probs"].cpu().detach().numpy()
-        mask = output_dict["mask"]    
+        mask = output_dict["mask"]
         lengths = get_lengths_from_binary_sequence_mask(mask)
         arcs = []
         arc_tags = []
         # append arc and label to calculate ELAS
         labeled_arcs = []
-        
+
         for instance_arc_probs, instance_arc_tag_probs, length in zip(
             arc_probs, arc_tag_probs, lengths
         ):
@@ -335,12 +337,12 @@ class EnhancedDMParser(Model):
             edges_and_tags = []
             # dictionary where a word has been assigned a head
             found_heads = {}
-            # Note: manually selecting the most probable edge will result in slightly different F1 scores 
+            # Note: manually selecting the most probable edge will result in slightly different F1 scores
             # between F1Measure and EnhancedAttachmentScores
             # set each label to False but will be updated as True if the word has a head over the threshold
             for i in range(length):
                 found_heads[i] = False
-            
+
             for i in range(length):
                 for j in range(length):
                     if arc_matrix[i, j] == 1:
@@ -351,7 +353,7 @@ class EnhancedDMParser(Model):
                         # append ((h,m), label) tuple
                         edges_and_tags.append((head_modifier_tuple, self.vocab.get_token_from_index(tag, "deps")))
                         found_heads[j] = True
-            
+
             # some words won't have found heads so we will find the edge with the highest probability for each unassigned word
             head_information = found_heads.items()
             unassigned_tokens = []
@@ -359,10 +361,10 @@ class EnhancedDMParser(Model):
                 # we're not interested in selecting heads for the dummy ROOT token
                 if has_found_head == False and word != 0:
                     unassigned_tokens.append(word)
-                                
+
             if len(unassigned_tokens) >= 1:
                 head_choices = {unassigned_token: [] for unassigned_token in unassigned_tokens}
-                
+
                 # keep track of the probabilities of the other words being heads of the unassigned tokens
                 for i in range(length):
                     for j in unassigned_tokens:
@@ -371,25 +373,25 @@ class EnhancedDMParser(Model):
                         # score
                         probability = instance_arc_probs[i, j]
                         head_choices[j].append((head_modifier_tuple, probability))
-                        
+
                 for unassigned_token, edge_score_tuples in head_choices.items():
                     # get the best edge for each unassigned token based on the score which is element [1] in the tuple.
                     best_edge = max(edge_score_tuples, key = itemgetter(1))[0]
-                    
+
                     edges.append(best_edge)
-                    tag = instance_arc_tag_probs[best_edge].argmax(-1)                   
+                    tag = instance_arc_tag_probs[best_edge].argmax(-1)
                     edge_tags.append(self.vocab.get_token_from_index(tag, "deps"))
                     edges_and_tags.append((best_edge, self.vocab.get_token_from_index(tag, "deps")))
 
             arcs.append(edges)
             arc_tags.append(edge_tags)
-            labeled_arcs.append(edges_and_tags)                        
-        
+            labeled_arcs.append(edges_and_tags)
+
         output_dict["arcs"] = arcs
         output_dict["arc_tags"] = arc_tags
         output_dict["labeled_arcs"] = labeled_arcs
         return output_dict
-    
+
     def _construct_loss(
         self,
         arc_scores: torch.Tensor,
@@ -399,9 +401,9 @@ class EnhancedDMParser(Model):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes the arc and tag loss for an adjacency matrix.
-        
+
         # Parameters
-        
+
         arc_scores : `torch.Tensor`, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate a
             binary classification decision for whether an edge is present between two words.
@@ -452,9 +454,9 @@ class EnhancedDMParser(Model):
         Decodes the head and head tag predictions by decoding the unlabeled arcs
         independently for each word and then again, predicting the head tags of
         these greedily chosen arcs independently.
-        
+
         # Parameters
-        
+
         arc_scores : `torch.Tensor`, required.
             A tensor of shape (batch_size, sequence_length, sequence_length) used to generate
             a distribution over attachments of a given word to all other words.
@@ -463,9 +465,9 @@ class EnhancedDMParser(Model):
             generate a distribution over tags for each arc.
         mask : `torch.BoolTensor`, required.
             A mask of shape (batch_size, sequence_length).
-            
+
         # Returns
-        
+
         arc_probs : `torch.Tensor`
             A tensor of shape (batch_size, sequence_length, sequence_length) representing the
             probability of an arc being present for this edge.
@@ -497,5 +499,5 @@ class EnhancedDMParser(Model):
         for metric, value in graph_results_dict.items():
             if metric in metrics_to_track:
                 metrics[metric] = value
-                
+
         return metrics
