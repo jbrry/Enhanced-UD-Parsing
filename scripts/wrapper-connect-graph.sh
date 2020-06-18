@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: Joachim Wagner
+
+
 # make connect_graph work with stdin and stdout
 
 SCRIPT_DIR=$(dirname $0)

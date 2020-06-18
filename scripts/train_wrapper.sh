@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: James Barry
+
+
 # wraps scripts/train.sh so multiple tbids can be run and if a tbid fails the script will continue.
 # run: sbatch --gres=gpu:rtx2080ti:1 -J kg_graph scripts/train_wrapper.sh enhanced kg 1
 

@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: James Barry
+
+
 test -z $1 && echo "Missing task type <basic> or <enhanced>"
 test -z $1 && exit 1
 TASK=$1

@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: James Barry
+
+
 # usage: ./scripts/fix_all_final.sh tmp/final_tmp/ tmp/final_fixed/
 
 
