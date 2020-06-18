@@ -5,27 +5,35 @@ Team ADAPT.
 
 ## Semantic Parser Installation 
 
+This project contains the modules `tagging` and `tagging_stable` which use the master branch of AllenNLP and `AllenNLP 0.9.0` respectively.
+
 If using a [Conda](https://conda.io/) environment, create a Conda environment with Python 3.7:
 
 ```bash
-conda create -n enhanced_parsing python=3.7
+# stable
+conda create -n enhanced_parsing_stable python=3.7
+# dev
+conda create -n enhanced_parsing_dev python=3.7
 ```
-
-Activate the Conda environment:
+Activate the Conda environment and install the dependencies:
 
 ```bash
-conda activate enhanced_parsing
+conda activate enhanced_parsing_stable
+# or for dev
+conda activate enhanced_parsing_dev
 ```
 
-This project uses AllenNLP [installed from the master branch](https://github.com/allenai/allennlp#installing-from-source) and the most recent version of the [conllu](https://github.com/EmilStenstrom/conllu) library. If you install AllenNLP from master you should have the required version.
+```bash
+pip install -r requirements_stable.txt
+# or for dev
+pip install -r requirements_dev.txt
+```
 
-### Supporting prediction with both stable and bleeding edge
+### Or if using `venv` with both stable and bleeding edge
 
 Here we are testing with Python 3.6.
 
 #### Virtual environment for stable 0.9.0
-
-Check that 0.9.0 is the most recent stable. 1.0.0 could be there any moment now.
 
 ```
 mkdir venv
