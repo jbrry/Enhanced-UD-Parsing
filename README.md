@@ -12,6 +12,7 @@ If using a [Conda](https://conda.io/) environment, create a Conda environment wi
 ```bash
 # stable
 conda create -n enhanced_parsing_stable python=3.7
+
 # dev
 conda create -n enhanced_parsing_dev python=3.7
 ```
@@ -19,17 +20,19 @@ Activate the Conda environment and install the dependencies:
 
 ```bash
 conda activate enhanced_parsing_stable
+
 # or for dev
 conda activate enhanced_parsing_dev
 ```
 
 ```bash
 pip install -r requirements_stable.txt
+
 # or for dev
 pip install -r requirements_dev.txt
 ```
 
-### Or if using `venv` with both stable and bleeding edge
+### If using `venv`, to create environments with stable and bleeding edge:
 
 Here we are testing with Python 3.6.
 
@@ -102,3 +105,21 @@ You can use `train.sh` with the following arguments, where `${task_type}` is eit
 * https://github.com/jowagner/UDPipe-Future/tree/multitreebank (use the `tbemb` branch, e.g. with `git checkout tbemb`)
 * https://github.com/jowagner/ud-combination
 
+
+## Citing
+If you wish to cite this paper or use the software please use the reference below:
+
+```latex
+@InProceedings{barry-wagner-foster:2020:iwpt,
+  author    = {Barry, James  and  Wagner, Joachim  and  Foster, Jennifer},
+  title     = {The ADAPT Enhanced Dependency Parser at the IWPT 2020 Shared Task},
+  booktitle      = {Proceedings of the 16th International Conference on Parsing Technologies and the IWPT 2020 Shared Task on Parsing into Enhanced Universal Dependencies},
+  month          = {July},
+  year           = {2020},
+  address        = {Online},
+  publisher      = {Association for Computational Linguistics},
+  pages     = {227--235},
+  abstract  = {We describe the ADAPT system for the 2020 IWPT Shared Task on parsing enhanced Universal Dependencies in 17 languages. We implement a pipeline approach using UDPipe and UDPipe-future to provide initial levels of annotation. The enhanced dependency graph is either produced by a graph-based semantic dependency parser or is built from the basic tree using a small set of heuristics. Our results show that, for the majority of languages, a semantic dependency parser can be successfully applied to the task of parsing enhanced dependencies. Unfortunately, we did not ensure a connected graph as part of our pipeline approach and our competition submission relied on a last-minute fix to pass the validation script which harmed our official evaluation scores significantly. Our submission ranked eighth in the official evaluation with a macro-averaged coarse ELAS F1 of 67.23 and a treebank average of 67.49. We later implemented our own graph-connecting fix which resulted in a score of 79.53 (language average) or 79.76 (treebank average), which would have placed fourth in the competition evaluation.},
+  url       = {https://www.aclweb.org/anthology/2020.iwpt-1.24}
+}
+```
