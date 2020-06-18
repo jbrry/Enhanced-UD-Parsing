@@ -1,3 +1,8 @@
+"""
+This model contains code for scoring edges and deprels as in https://github.com/coli-saar/am-parser
+"""
+
+
 from typing import Dict, Tuple, Any, List
 import logging
 import copy

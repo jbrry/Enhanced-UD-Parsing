@@ -1,4 +1,6 @@
-# original implementation: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
+"""
+This model is based on the original AllenNLP implementation: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
+"""
 
 from typing import Optional, Dict, Tuple, Any, List
 import logging

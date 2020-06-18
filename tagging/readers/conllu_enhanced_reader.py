@@ -1,6 +1,7 @@
-# based on the `universal_dependencies` dataset reader in: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/dataset_readers/universal_dependencies.py
-# feature extraction is based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
-
+"""
+based on the `universal_dependencies` dataset reader in: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/dataset_readers/universal_dependencies.py
+and the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
+"""
 from typing import Dict, Tuple, List, Any, Callable
 import logging
 

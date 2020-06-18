@@ -1,4 +1,6 @@
-# based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/predictors/predictor.py
+"""
+based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/predictors/predictor.py
+"""
 
 from typing import Dict, Any, List, Tuple
 from overrides import overrides
