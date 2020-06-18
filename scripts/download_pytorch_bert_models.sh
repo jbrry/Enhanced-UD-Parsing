@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: James Barry
+
 # downloads BERT models for languages with pre-trained models on https://huggingface.co/models
 # assumes regular BERT/Multilingual BERT are already downloaded and converted to pytorch format
 # TODO French Roberta?
