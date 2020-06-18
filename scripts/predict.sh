@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: James Barry
+
+
 test -z $1 && echo "Missing list of TBIDs (space or colon-separated)"
 test -z $1 && exit 1
 TBIDS=$(echo $1 | tr ':' ' ')

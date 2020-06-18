@@ -1,4 +1,12 @@
 #!/bin/bash
+
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: Joachim Wagner
+
   
 #SBATCH -p compute       # which partition to run on
 #SBATCH -J fasttext   # name for the job

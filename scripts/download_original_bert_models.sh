@@ -2,6 +2,13 @@
 
 # downloads regular BERT/Multilingual BERT and changes to PyTorch format
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: James Barry
+
 TRANSFORMER_DIR=${HOME}/transformer_dir/pytorch_models
 cd $TRANSFORMER_DIR
 

@@ -1,4 +1,6 @@
 # original implementation: https://github.com/allenai/allennlp/blob/master/allennlp/data/fields/adjacency_field.py
+# modified by James Barry, Dublin City University
+# License: Apache License 2.0
 
 from typing import Dict, List, Set, Tuple
 import logging

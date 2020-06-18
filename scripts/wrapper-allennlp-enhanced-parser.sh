@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# (C) 2020 Dublin City University
+# All rights reserved. This material may not be
+# reproduced, displayed, modified or distributed without the express prior
+# written permission of the copyright holder.
+
+# Author: Joachim Wagner
+
+
 test -z $1 && echo "Missing allennlp version (090 or dev)"
 test -z $1 && exit 1
 ALLENNLP_VERSION=$1
