@@ -1,3 +1,14 @@
+# sources:
+#  * https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/dataset_readers/universal_dependencies.py
+#    under Apache License 2.0
+#  * https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
+#    under MIT License
+# modified by James Barry, Dublin City University
+# License: Apache License 2.0
+# Justification of license choice:
+#  * https://www.quora.com/Is-the-MIT-license-compatible-with-the-Apache-License-Version-2-APLv2
+#  * https://opensource.stackexchange.com/questions/1711/combining-code-written-under-different-licenses-eiffel-forum-license-mit-and-a
+
 """
 based on the `universal_dependencies` dataset reader in: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/dataset_readers/universal_dependencies.py
 and the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
