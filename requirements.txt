@@ -1,4 +1,0 @@
-allennlp
-conllu
-transformers
-tensorflow-gpu==1.15
