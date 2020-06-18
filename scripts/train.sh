@@ -16,6 +16,11 @@ test -z $4 && echo "Missing random seed"
 test -z $4 && exit 1
 RANDOM_SEED=$4
 
+
+test -z $5 && echo "Missing package version <tagging> <tagging_stable>"
+test -z $5 && exit 1
+PACKAGE=$5
+
 # official shared-task data (filtered contains treebanks with long sentences removed.)
 TB_DIR=data/train-dev
 
@@ -54,9 +59,12 @@ for tbid in $TBIDS ; do
     export TRAIN_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-train.conllu
     export DEV_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-dev.conllu
     export TEST_DATA_PATH=${TB_DIR}/${tb_name}/${tbid}-ud-test.conllu
-                   
-    #configs/ud_enhanced_dm_luxf.jsonnet
-    allennlp train configs/ud_${TASK}_${MODEL_TYPE}_luxf.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED}-${TIMESTAMP} --include-package tagging
+          
+    if [ "${PACKAGE}" = "tagging_stable" ]; then
+    allennlp train configs/stable/ud_enhanced_dm_u.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED}-${TIMESTAMP} --include-package ${PACKAGE}
+    elif [ "${PACKAGE}" = "tagging" ]; then
+    allennlp train configs/ud_${TASK}_${MODEL_TYPE}_luxfb.jsonnet -s logs/${tbid}-${TASK}-${MODEL_TYPE}-seed-${RANDOM_SEED}-${TIMESTAMP} --include-package ${PACKAGE}
+    fi
   done
 done
 
