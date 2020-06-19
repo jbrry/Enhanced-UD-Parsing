@@ -1,8 +1,8 @@
 # original AllenNLP implementation: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
 # modified by James Barry, Dublin City University,
 # with edge-scoring code from https://github.com/coli-saar/am-parser
-# License: Apache License 2.0
-# License for the am-parser's edge-scoring code: to be confirmed
+# Licence: Apache License 2.0
+# Licence for the am-parser's edge-scoring code: to be confirmed
 
 
 from typing import Dict, Tuple, Any, List

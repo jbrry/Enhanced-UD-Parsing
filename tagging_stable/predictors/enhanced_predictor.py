@@ -1,6 +1,6 @@
 # source: https://github.com/Hyperparticle/udify/blob/master/udify/predictors/predictor.py
 # modified by James Barry, Dublin City University
-# License: MIT License
+# Licence: MIT License
 
 """
 based on the implementation in: https://github.com/Hyperparticle/udify/blob/master/udify/predictors/predictor.py

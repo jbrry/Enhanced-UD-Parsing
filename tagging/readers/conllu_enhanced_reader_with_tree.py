@@ -4,8 +4,8 @@
 #  * https://github.com/Hyperparticle/udify/blob/master/udify/dataset_readers/universal_dependencies.py
 #    under MIT License
 # modified by James Barry, Dublin City University
-# License: Apache License 2.0
-# Justification of license choice:
+# Licence: Apache License 2.0
+# Justification of licence choice:
 #  * https://www.quora.com/Is-the-MIT-license-compatible-with-the-Apache-License-Version-2-APLv2
 #  * https://opensource.stackexchange.com/questions/1711/combining-code-written-under-different-licenses-eiffel-forum-license-mit-and-a
 

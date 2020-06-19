@@ -1,6 +1,6 @@
 # source: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
 # modified by James Barry, Dublin City University
-# License: Apache License 2.0
+# Licence: Apache License 2.0
 
 """
 This model is based on the original AllenNLP implementation: https://github.com/allenai/allennlp-models/blob/master/allennlp_models/structured_prediction/models/graph_parser.py
