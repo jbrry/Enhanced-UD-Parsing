@@ -94,10 +94,10 @@ tar -xvzf iwpt2020-train-dev.tgz
 ```
 
 ## Train semantic parser models
-You can use `train.sh` with the following arguments, where `${task_type}` is either `basic` or `enhanced`, `${model_type}` is either `dm` or `kg` depending on the type of parser being used, `${tbid}` is the treebank id, e.g. `en_ewt` and `${random_seed}` is the random seed e.g. `12345`.
+You can use `train.sh` with the following arguments, where `${task_type}` is either `basic` or `enhanced`, `${model_type}` is either `dm` or `kg` depending on the type of parser being used, `${tbid}` is the treebank id, e.g. `en_ewt`, `${random_seed}` is the random seed e.g. `12345` and `${package}` is the package version, either `tagging_stable` or `tagging`.
 
 ```bash
-./scripts/train.sh ${task_type} ${model_type} ${tbid} ${random_seed}
+./scripts/train.sh ${task_type} ${model_type} ${tbid} ${random_seed} ${package}
 ```
 
 ## Basic Parser
@@ -107,7 +107,7 @@ You can use `train.sh` with the following arguments, where `${task_type}` is eit
 
 
 ## Citing
-If you wish to cite this paper or use the software please use the reference below:
+If you wish to cite this paper or if you use the software in your research please use the reference below:
 
 ```latex
 @InProceedings{barry-wagner-foster:2020:iwpt,
