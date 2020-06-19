@@ -1,6 +1,14 @@
 * to be updated
 
-Semantic Parser
+## Basic Parser
+
+The file `udpipe-future-models-used-in-dev.tsv` shows what models we used during development.
+A `+` in the treebanks column means that a multi-treebank model was trained.
+The prefix `task.` means that a treebank as distributed by the shared task was used.
+The prefix `ud25.` means that a treebank from the UD v2.5 release was used.
+
+
+## Semantic Parser
 
 The file `allennlp-models-used-in-dev.txt` shows what models we used during development.
 TODO:
