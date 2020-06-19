@@ -10,9 +10,9 @@
    “Software”).
 
    Some files in this source code repository are distributed under
-   other licenses. These are indicated in code comments near the
-   start of each file. The respective license texts can be found
-   in the folder “other-licenses”.
+   other licences. These are indicated in code comments near the
+   start of each file. The respective licence texts can be found
+   in the folder “other-licences”.
 
    IMPORTANT NOTICE TO ALL USERS:
 
