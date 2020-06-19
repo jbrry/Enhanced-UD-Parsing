@@ -1,6 +1,6 @@
 # source: https://github.com/coli-saar/am-parser
 # modified by James Barry, Dublin City University
-# Licence: to be confirmed
+# Licence: Apache License 2.0
 
 """
 This model contains code for scoring edges and deprels as in https://github.com/coli-saar/am-parser

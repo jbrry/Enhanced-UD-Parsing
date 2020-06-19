@@ -2,7 +2,6 @@
 # modified by James Barry, Dublin City University,
 # with edge-scoring code from https://github.com/coli-saar/am-parser
 # Licence: Apache License 2.0
-# Licence for the am-parser's edge-scoring code: to be confirmed
 
 
 from typing import Dict, Tuple, Any, List
