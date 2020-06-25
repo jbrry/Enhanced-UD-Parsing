@@ -14,7 +14,12 @@ The file `allennlp-models-used-in-dev.txt` shows what models we used during deve
 The type of model used can be inferred from the name of the model. For instance, `allennlp-090` means the model was produced with AllenNLP version `0.9.0` and `allennlp-dev` means the model was produced using the `development` branch.
 The `treebank id` is given in the metadata string, e.g. `ar_padt`.
 `enhanced` means the parser was trained to produce enhanced dependency graphs, i.e. the `deps` column in a CoNLL-U file.
-`dm` means the parser uses a model inspired by Dozat and Manning (2018), using a BiLSTM encoder where the hidden representations are passed to four separate MLPs to obtain representations: `arc-head`, `arc-dep`, `rel-head` and  `rel-dep`. We then compute [Bilinear matrix attention](https://github.com/allenai/allennlp/blob/master/allennlp/modules/matrix_attention/bilinear_matrix_attention.py) between the respective arc and deprel representations and use sigmoid cross-entropy loss for arc-prediction and softmax cross-entropy loss for label prediction.
+`dm` means the parser uses a model inspired by Dozat and Manning (2018), i.e. uses a BiLSTM encoder where the hidden representations are passed to four separate MLPs to obtain representations: `arc-head`, `arc-dep`, `rel-head` and  `rel-dep`.
+We then compute [Bilinear matrix attention](https://github.com/allenai/allennlp/blob/master/allennlp/modules/matrix_attention/bilinear_matrix_attention.py) between the respective arc and deprel representations and use sigmoid cross-entropy loss for arc-prediction and softmax cross-entropy loss for label prediction.
+Alternatively, `kg` can be passed which uses the scoring model of Kiperwasser and Goldberg, (2016).
+Note that we didn't properly evaluate this model for the shared task but preliminary results look encouraging.
+We used the code from the [am-parser](https://github.com/coli-saar/am-parser) to score edges and deprels in the style of Kiperwasser and Goldberg (2016).
+
 The type of `BERT` model is then given, e.g. `ar-BERT` means we used a monolingual Arabic BERT model.
 Finally, the type of features (embeddings) used are given:
 - `l`: lemma
