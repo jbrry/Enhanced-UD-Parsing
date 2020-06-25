@@ -1,7 +1,8 @@
 # Enhanced UD Parsing
 
-Repository for enhanced UD parsing for the 2020 [IWPT/UD Shared Task](https://universaldependencies.org/iwpt20/).
-Team ADAPT.
+Repository for [The ADAPT Enhanced Dependency Parser at the IWPT 2020 Shared Task](https://www.aclweb.org/anthology/2020.iwpt-1.24/).
+
+Team ADAPT at the [IWPT 2020 Shared Task](https://universaldependencies.org/iwpt20/).
 
 ## Semantic Parser Installation 
 
@@ -99,6 +100,8 @@ You can use `train.sh` with the following arguments, where `${task_type}` is eit
 ```bash
 ./scripts/train.sh ${task_type} ${model_type} ${tbid} ${random_seed} ${package}
 ```
+
+Please see `reproducibility/iwpt-2020` for more details about the models used for our submission to the IWPT 2020 Shared Task.
 
 ## Basic Parser
 
