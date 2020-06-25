@@ -112,9 +112,9 @@ If you wish to cite this paper or if you use the software in your research pleas
 ```latex
 @InProceedings{barry-wagner-foster:2020:iwpt,
   author    = {Barry, James  and  Wagner, Joachim  and  Foster, Jennifer},
-  title     = {The ADAPT Enhanced Dependency Parser at the IWPT 2020 Shared Task},
+  title     = {The {ADAPT} Enhanced Dependency Parser at the {IWPT} 2020 Shared Task},
   booktitle      = {Proceedings of the 16th International Conference on Parsing Technologies and the IWPT 2020 Shared Task on Parsing into Enhanced Universal Dependencies},
-  month          = {July},
+  month          = jul,
   year           = {2020},
   address        = {Online},
   publisher      = {Association for Computational Linguistics},
