@@ -1,4 +1,4 @@
-* to be updated
+Work in progress: We aim to have this documentation ready for the start of the conference.
 
 ## Basic Parser
 
