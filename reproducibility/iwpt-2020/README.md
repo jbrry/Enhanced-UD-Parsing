@@ -21,7 +21,7 @@ Finally, the type of features (embeddings) used are given:
 - `u`: upos
 - `x`: xpos
 - `f`: morph feats
-- `b`: basic tree (head direction and distance features as well as embedding the dependency relation fromt the basic tree).
+- `b`: basic tree (head direction and distance features as well as embedding the dependency relation from the basic tree).
 
 The date is added to the metadata string to provide a unique identifier per each model and to help us keep track of model experiments.
 
