@@ -1,4 +1,4 @@
-Work in progress: We aim to have this documentation ready for the start of the conference.
+Work in progress: We aim to have this documentation ready for the start of the conference. Please open an issue if you have a specific question which is not answered here or if there is something which is unclear.
 
 ## Basic Parser
 
